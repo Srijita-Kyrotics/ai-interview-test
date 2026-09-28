@@ -1,93 +1,202 @@
 'use server';
 
-import { db, STANDARD_SKILLS, Job, Student, Application, ApplicationStage } from './store';
+import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
-// Helper to generate IDs
-const generateId = () => Math.random().toString(36).substring(2, 9);
+import * as repo from '@/lib/db/repo';
+import {
+  DEFAULT_STAGE,
+  PIPELINE_STAGES,
+  STANDARD_SKILLS,
+  calculateSkillMatch,
+  isApplicationStage,
+  rankSkillSuggestions,
+} from './types';
+import type { Application, Job, OpportunityType, Recruiter, Skill, Student } from './types';
+
+const STUDENT_COOKIE = 'rf_student';
+const RECRUITER_COOKIE = 'rf_recruiter';
+
+/* -------------------------------------------------------------------------- */
+/*                              Skill suggestions                             */
+/* -------------------------------------------------------------------------- */
 
 export async function getSkillSuggestions(query: string) {
-  if (!query) return [];
-  const lowerQuery = query.toLowerCase();
-  return STANDARD_SKILLS.filter(skill => skill.toLowerCase().includes(lowerQuery));
+  return rankSkillSuggestions(STANDARD_SKILLS, query);
 }
 
-export async function createStudent(data: Omit<Student, 'id'>) {
-  const newStudent: Student = { ...data, id: generateId() };
-  db.students.push(newStudent);
-  return newStudent;
+/* -------------------------------------------------------------------------- */
+/*                                   Session                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function getCurrentStudent(): Promise<Student | null> {
+  const id = (await cookies()).get(STUDENT_COOKIE)?.value;
+  if (!id) return null;
+  return repo.findStudentById(id);
+}
+
+export async function startStudentSession(studentId: string) {
+  (await cookies()).set(STUDENT_COOKIE, studentId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+}
+
+export async function endStudentSession() {
+  (await cookies()).delete(STUDENT_COOKIE);
+}
+
+export async function getCurrentRecruiter(): Promise<Recruiter | null> {
+  const id = (await cookies()).get(RECRUITER_COOKIE)?.value;
+  if (!id) return null;
+  return repo.findRecruiterById(id);
+}
+
+export async function signInRecruiter(name: string, company: string) {
+  const trimmedName = name.trim();
+  const trimmedCompany = company.trim();
+  // Reuse an existing recruiter with the same details so signing in again
+  // returns you to your own roles instead of creating an empty duplicate.
+  const recruiter =
+    repo.findRecruiterByName(trimmedName, trimmedCompany) ??
+    repo.insertRecruiter(trimmedName, trimmedCompany);
+
+  (await cookies()).set(RECRUITER_COOKIE, recruiter.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+  return recruiter;
+}
+
+export async function endRecruiterSession() {
+  (await cookies()).delete(RECRUITER_COOKIE);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  Students                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function createStudent(data: {
+  name: string;
+  skills: Skill[];
+  github: string;
+  linkedin: string;
+}) {
+  const student = repo.insertStudent(data);
+  await startStudentSession(student.id);
+  return student;
+}
+
+export async function updateStudent(
+  id: string,
+  data: { name: string; skills: Skill[]; github: string; linkedin: string },
+) {
+  const student = repo.updateStudentRow(id, data);
+  revalidatePath('/student/dashboard');
+  revalidatePath('/student/profile');
+  return student;
 }
 
 export async function getStudent(id: string) {
-  return db.students.find(s => s.id === id) || null;
+  return repo.findStudentById(id);
 }
 
-export async function createJob(data: Omit<Job, 'id'>) {
-  const newJob: Job = { ...data, id: generateId() };
-  db.jobs.push(newJob);
+/* -------------------------------------------------------------------------- */
+/*                              Jobs / internships                            */
+/* -------------------------------------------------------------------------- */
+
+export async function createJob(data: {
+  type: OpportunityType;
+  title: string;
+  description: string;
+  skillsRequired: Skill[];
+  eligibility: string;
+  recruiterId: string;
+}) {
+  const job = repo.insertJob(data);
   revalidatePath('/student/jobs');
   revalidatePath('/recruiter');
-  return newJob;
+  return job;
 }
 
-export async function getJobs() {
-  return db.jobs;
+export async function getOpenJobs(): Promise<Job[]> {
+  return repo.listOpenJobs();
 }
 
-export async function getJob(id: string) {
-  return db.jobs.find(j => j.id === id) || null;
+export async function getJobsByRecruiter(recruiterId: string): Promise<Job[]> {
+  return repo.listJobsByRecruiter(recruiterId);
 }
 
-export async function applyForJob(studentId: string, jobId: string) {
-  const student = db.students.find(s => s.id === studentId);
-  const job = db.jobs.find(j => j.id === jobId);
-  
-  if (!student || !job) {
-    throw new Error('Student or Job not found');
-  }
+export async function getJob(id: string): Promise<Job | null> {
+  return repo.findJobById(id);
+}
 
-  // Calculate skill match
-  const requiredSkills = job.skillsRequired;
-  const studentSkills = student.skills;
-  const matchCount = requiredSkills.filter(skill => studentSkills.includes(skill)).length;
-  const matchScore = requiredSkills.length > 0 ? (matchCount / requiredSkills.length) * 100 : 100;
+/* -------------------------------------------------------------------------- */
+/*                                Applications                                */
+/* -------------------------------------------------------------------------- */
 
-  const newApplication: Application = {
-    id: generateId(),
-    studentId,
+/**
+ * Applies the signed-in student to a job. The student is resolved from the
+ * session cookie rather than the request body so a client cannot submit an
+ * application on behalf of another student.
+ */
+export async function applyForJob(jobId: string): Promise<Application> {
+  const student = await getCurrentStudent();
+  if (!student) throw new Error('You need a student profile before applying.');
+
+  const job = repo.findJobById(jobId);
+  if (!job) throw new Error('This opportunity is no longer available.');
+
+  const match = calculateSkillMatch(job.skillsRequired, student.skills);
+  const application = repo.insertApplication({
+    studentId: student.id,
     jobId,
-    stage: 'Applied',
-    matchScore,
-  };
+    stage: DEFAULT_STAGE,
+    matchScore: match.score,
+    matchedSkills: match.matched,
+  });
 
-  db.applications.push(newApplication);
   revalidatePath('/student/dashboard');
   revalidatePath(`/recruiter/jobs/${jobId}`);
-  
-  return newApplication;
+  return application;
 }
 
 export async function getStudentApplications(studentId: string) {
-  const apps = db.applications.filter(a => a.studentId === studentId);
-  return apps.map(app => ({
-    ...app,
-    job: db.jobs.find(j => j.id === app.jobId)
-  }));
+  return repo.listApplicationsByStudent(studentId);
 }
 
 export async function getJobApplications(jobId: string) {
-  const apps = db.applications.filter(a => a.jobId === jobId);
-  return apps.map(app => ({
-    ...app,
-    student: db.students.find(s => s.id === app.studentId)
-  }));
+  return repo.listApplicationsByJob(jobId);
 }
 
-export async function updateApplicationStage(applicationId: string, newStage: ApplicationStage) {
-  const app = db.applications.find(a => a.id === applicationId);
-  if (app) {
-    app.stage = newStage;
-    revalidatePath('/student/dashboard');
-    revalidatePath(`/recruiter/jobs/${app.jobId}`);
-  }
+export async function getApplication(id: string) {
+  return repo.findApplicationById(id);
+}
+
+export async function updateApplicationStage(
+  applicationId: string,
+  newStage: string,
+): Promise<Application> {
+  if (!isApplicationStage(newStage)) throw new Error(`Unknown stage: ${newStage}`);
+  const application = repo.setApplicationStage(applicationId, newStage);
+  revalidatePath('/student/dashboard');
+  revalidatePath(`/recruiter/jobs/${application.jobId}`);
+  revalidatePath(`/recruiter/candidates/${applicationId}`);
+  return application;
+}
+
+/** Moves a candidate one step along the pipeline, or into a final stage. */
+export async function advanceApplicationStage(
+  applicationId: string,
+  target: 'next' | 'reject' = 'next',
+) {
+  const application = repo.findApplicationById(applicationId);
+  if (!application) throw new Error('Application not found');
+  if (target === 'reject') return updateApplicationStage(applicationId, 'Rejected');
+
+  const index = PIPELINE_STAGES.indexOf(application.stage);
+  const next = PIPELINE_STAGES[index + 1] ?? 'Selected';
+  return updateApplicationStage(applicationId, next);
 }

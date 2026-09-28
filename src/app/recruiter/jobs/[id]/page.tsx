@@ -1,113 +1,215 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getJob, getJobApplications, updateApplicationStage } from '@/lib/actions';
-import { Job, Application, Student, ApplicationStage, PIPELINE_STAGES } from '@/lib/store';
+import { notFound, redirect } from 'next/navigation';
+import PipelineTracker from '@/components/PipelineTracker';
+import SkillMatchSummary from '@/components/SkillMatchSummary';
+import StageControls from '@/components/StageControls';
+import { RoundStatusBadge } from '@/components/rounds/RoundStatus';
+import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
+import { getCurrentRecruiter, getJob, getJobApplications } from '@/lib/actions';
+import { getRoundStatesForRecruiter } from '@/lib/round-actions';
+import { OPPORTUNITY_TYPE_LABELS, PIPELINE_STAGES } from '@/lib/types';
+import type { RoundState } from '@/lib/assessment/types';
+import type { ApplicationWithStudent, Job } from '@/lib/types';
 
-export default function JobApplicantsPipeline({ params }: { params: { id: string } }) {
-  const [job, setJob] = useState<Job | null>(null);
-  const [applications, setApplications] = useState<(Application & { student?: Student })[]>([]);
+type JobPipelinePageProps = {
+  params: Promise<{ id: string }>;
+};
 
-  useEffect(() => { loadData(); }, [params.id]);
+export async function generateMetadata({ params }: JobPipelinePageProps) {
+  const { id } = await params;
+  const job = await getJob(id);
+  return { title: job ? `${job.title} pipeline` : 'Opportunity not found' };
+}
 
-  const loadData = async () => {
-    setJob(await getJob(params.id));
-    setApplications(await getJobApplications(params.id));
-  };
+export default async function JobPipelinePage({ params }: JobPipelinePageProps) {
+  const { id } = await params;
 
-  const handleStageChange = async (appId: string, newStage: ApplicationStage) => {
-    await updateApplicationStage(appId, newStage);
-    loadData();
-  };
+  const recruiter = await getCurrentRecruiter();
+  if (!recruiter) redirect('/recruiter');
 
-  if (!job) return <div className="container" style={{ textAlign: 'center' }}>Loading Pipeline...</div>;
+  const job = await getJob(id);
+  if (!job) notFound();
+  // A recruiter may only see the pipeline for their own roles.
+  if (job.recruiterId !== recruiter.id) notFound();
+
+  const applications = await getJobApplications(job.id);
+
+  // One batched pass so each card can show its round status without N+1 calls.
+  const roundByApplication = new Map<string, RoundState>();
+  await Promise.all(
+    applications.map(async application => {
+      const states = await getRoundStatesForRecruiter(application.id, ACTIVE_ROUND_KINDS);
+      const communication = states.communication;
+      if (communication) roundByApplication.set(application.id, communication);
+    }),
+  );
+
+  const decided = applications.filter(
+    a => a.stage === 'Selected' || a.stage === 'Rejected',
+  );
+  const active = applications.filter(a => !decided.includes(a));
 
   return (
-    <div className="container" style={{ maxWidth: '1200px' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <Link href="/recruiter" style={{ color: 'var(--accent)', textDecoration: 'none', marginBottom: '1rem', display: 'inline-block' }}>← Back to Dashboard</Link>
-        <h1>Pipeline: {job.title}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-          <span style={{ color: 'var(--text-muted)', marginRight: '1rem', alignSelf: 'center' }}>Requirements:</span>
-          {job.skillsRequired.map(s => <span key={s} className="badge">{s}</span>)}
+    <div className="container container-wide">
+      <Link href="/recruiter" className="back-link">
+        &larr; Back to dashboard
+      </Link>
+
+      <div className="page-head">
+        <div>
+          <div className="job-card-top">
+            <span className="tag">{OPPORTUNITY_TYPE_LABELS[job.type]}</span>
+          </div>
+          <h1>{job.title}</h1>
+          <p className="lead-muted">
+            {applications.length} {applications.length === 1 ? 'applicant' : 'applicants'}
+          </p>
         </div>
       </div>
 
-      <div className="glass-card" style={{ padding: '0', overflowX: 'auto' }}>
-        {applications.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No applicants for this role yet.</div>
+      <div className="panel">
+        <h3>Required skills</h3>
+        {job.skillsRequired.length === 0 ? (
+          <p className="lead-muted">No required skills were listed for this role.</p>
         ) : (
-          <table>
-            <thead style={{ background: 'rgba(0,0,0,0.2)' }}>
-              <tr>
-                <th>Candidate</th>
-                <th>Skills Match</th>
-                <th>Match %</th>
-                <th>Current Stage</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {applications.map(app => (
-                <tr key={app.id}>
-                  <td>
-                    <div style={{ fontWeight: 600, color: 'white', marginBottom: '0.25rem' }}>{app.student?.name}</div>
-                    <div style={{ fontSize: '0.8rem', display: 'flex', gap: '0.5rem' }}>
-                      <a href={app.student?.github} target="_blank" style={{ color: 'var(--accent)', textDecoration: 'none' }}>GitHub</a>
-                      <a href={app.student?.linkedin} target="_blank" style={{ color: 'var(--accent)', textDecoration: 'none' }}>LinkedIn</a>
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', maxWidth: '250px' }}>
-                      {app.student?.skills.map(s => {
-                        const isMatch = job.skillsRequired.includes(s);
-                        return (
-                          <span key={s} style={{ 
-                            fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px',
-                            background: isMatch ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255,255,255,0.05)',
-                            color: isMatch ? '#86efac' : '#ccc'
-                          }}>
-                            {s}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ 
-                      fontSize: '1.25rem', fontWeight: 700,
-                      color: app.matchScore >= 80 ? 'var(--success)' : app.matchScore >= 50 ? 'var(--warning)' : 'var(--danger)'
-                    }}>
-                      {Math.round(app.matchScore)}%
-                    </div>
-                  </td>
-                  <td>
-                    <span className="badge" style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}>
-                      {app.stage}
-                    </span>
-                  </td>
-                  <td>
-                    <select 
-                      value={app.stage} 
-                      onChange={(e) => handleStageChange(app.id, e.target.value as ApplicationStage)}
-                      style={{ padding: '0.5rem', width: '150px' }}
-                    >
-                      <optgroup label="Pipeline Stages">
-                        {PIPELINE_STAGES.map(stage => <option key={stage} value={stage}>{stage}</option>)}
-                      </optgroup>
-                      <optgroup label="Decisions">
-                        <option value="Selected">Selected</option>
-                        <option value="Rejected">Rejected</option>
-                      </optgroup>
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="chip-row">
+            {job.skillsRequired.map(skill => (
+              <span key={skill} className="badge">
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
+        {job.eligibility && (
+          <>
+            <h3>Eligibility &amp; requirements</h3>
+            <p className="prose">{job.eligibility}</p>
+          </>
         )}
       </div>
+
+      <h2>Pipeline</h2>
+      {applications.length === 0 ? (
+        <div className="card empty-state">
+          <p>No applicants yet. Applications will appear here automatically.</p>
+        </div>
+      ) : (
+        <>
+          {PIPELINE_STAGES.map(stage => {
+            const candidates = active.filter(a => a.stage === stage);
+            if (candidates.length === 0) return null;
+            return (
+              <section key={stage} className="stage-group">
+                <h3 className="stage-group-title">
+                  {stage} <span className="count">{candidates.length}</span>
+                </h3>
+                <div className="stack">
+                  {candidates.map(application => (
+                    <CandidateCard
+                      key={application.id}
+                      application={application}
+                      job={job}
+                      round={roundByApplication.get(application.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          {decided.length > 0 && (
+            <section className="stage-group">
+              <h3 className="stage-group-title">Final result</h3>
+              <div className="stack">
+                {decided.map(application => (
+                  <CandidateCard
+                  key={application.id}
+                  application={application}
+                  job={job}
+                  round={roundByApplication.get(application.id)}
+                />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
+}
+
+function CandidateCard({
+  application,
+  job,
+  round,
+}: {
+  application: ApplicationWithStudent;
+  job: Job;
+  round?: RoundState;
+}) {
+  const { student } = application;
+  return (
+    <article className="card">
+      <div className="candidate-head">
+        <div>
+          <h4>
+            <Link href={`/recruiter/candidates/${application.id}`}>{student.name}</Link>
+          </h4>
+          <div className="link-row">
+            {student.github && (
+              <a href={student.github} target="_blank" rel="noreferrer noopener">
+                GitHub
+              </a>
+            )}
+            {student.linkedin && (
+              <a href={student.linkedin} target="_blank" rel="noreferrer noopener">
+                LinkedIn
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="candidate-badges">
+          <span className={`stage-pill stage-${slug(application.stage)}`}>
+            {application.stage}
+          </span>
+          {round && round.status !== 'locked' && <RoundStatusBadge state={round} showScore />}
+        </div>
+      </div>
+
+      <div className="candidate-body">
+        <div>
+          <h4 className="sub-label">Skill match</h4>
+          <SkillMatchSummary
+            job={job}
+            student={student}
+            matchedSkills={application.matchedSkills}
+          />
+        </div>
+        <div>
+          <h4 className="sub-label">Student skills</h4>
+          <div className="chip-row">
+            {student.skills.length === 0 && (
+              <span className="lead-muted">No skills on this profile.</span>
+            )}
+            {student.skills.map(skill => (
+              <span
+                key={skill}
+                className={`badge ${job.skillsRequired.includes(skill) ? 'badge-success' : 'badge-dim'}`}
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <PipelineTracker stage={application.stage} />
+
+      <StageControls applicationId={application.id} stage={application.stage} />
+    </article>
+  );
+}
+
+function slug(stage: string) {
+  return stage.toLowerCase().replace(/\s+/g, '-');
 }
