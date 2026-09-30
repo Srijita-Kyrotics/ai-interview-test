@@ -6,6 +6,7 @@ import {
   completeAssessmentRound,
   startAssessmentRound,
   submitRoundAnswer,
+  logProctoringEvent,
 } from '@/lib/round-actions';
 import type {
   AnswerEvaluation,
@@ -67,8 +68,27 @@ export function RoundRunner({
     const id = window.setInterval(() => {
       setSecondsLeft(prev => (prev === null ? null : Math.max(0, prev - 1)));
     }, 1000);
-    return () => window.clearInterval(id);
-  }, [timerRunning]);
+
+    const roundId = state.id;
+    if (!roundId) return () => window.clearInterval(id);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) logProctoringEvent(roundId, 'tab_switched');
+    };
+    const handleCopy = () => logProctoringEvent(roundId, 'copy');
+    const handlePaste = () => logProctoringEvent(roundId, 'paste');
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('copy', handleCopy);
+    document.addEventListener('paste', handlePaste);
+
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('copy', handleCopy);
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [timerRunning, state.id]);
 
   // Close the round automatically if the clock runs out mid-answer.
   useEffect(() => {

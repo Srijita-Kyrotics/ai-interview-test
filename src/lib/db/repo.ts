@@ -55,6 +55,12 @@ export function findStudentById(id: string): Student | null {
   return toStudent(row, skillsFor('student_skills', 'student_id', id));
 }
 
+export function findStudentByName(name: string): Student | null {
+  const row = getDb().prepare('SELECT * FROM students WHERE lower(name) = lower(?)').get(name) as StudentRow | undefined;
+  if (!row) return null;
+  return toStudent(row, skillsFor('student_skills', 'student_id', row.id));
+}
+
 export function insertStudent(data: {
   name: string;
   skills: string[];
@@ -115,14 +121,15 @@ function writeSkills(
 type RecruiterRow = { id: string; name: string; company: string };
 
 export function findRecruiterById(id: string): Recruiter | null {
-  return (getDb().prepare('SELECT * FROM recruiters WHERE id = ?').get(id) as RecruiterRow) ?? null;
+  const row = getDb().prepare('SELECT * FROM recruiters WHERE id = ?').get(id) as RecruiterRow | undefined;
+  return row ? { ...row } : null;
 }
 
 export function findRecruiterByName(name: string, company: string): Recruiter | null {
   const row = getDb()
     .prepare('SELECT * FROM recruiters WHERE lower(name) = lower(?) AND lower(company) = lower(?)')
     .get(name, company) as RecruiterRow | undefined;
-  return row ?? null;
+  return row ? { ...row } : null;
 }
 
 export function insertRecruiter(name: string, company: string): Recruiter {
@@ -131,6 +138,25 @@ export function insertRecruiter(name: string, company: string): Recruiter {
     .prepare('INSERT INTO recruiters (id, name, company) VALUES (?, ?, ?)')
     .run(recruiter.id, recruiter.name, recruiter.company);
   return recruiter;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  Admins                                    */
+/* -------------------------------------------------------------------------- */
+
+type AdminRow = { id: string; email: string; created_at: string };
+
+export function findAdminById(id: string) {
+  const row = getDb().prepare('SELECT * FROM admins WHERE id = ?').get(id) as AdminRow | undefined;
+  return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null;
+}
+
+export function insertAdmin(email: string) {
+  const admin = { id: generateId(), email, createdAt: now() };
+  getDb()
+    .prepare('INSERT INTO admins (id, email, created_at) VALUES (?, ?, ?)')
+    .run(admin.id, admin.email, admin.createdAt);
+  return admin;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -208,6 +234,49 @@ export function listJobsByRecruiter(recruiterId: string): Job[] {
     .prepare('SELECT * FROM jobs WHERE recruiter_id = ? ORDER BY created_at DESC, rowid DESC')
     .all(recruiterId) as JobRow[];
   return rows.map(hydrateJob);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Job Rounds                                  */
+/* -------------------------------------------------------------------------- */
+
+type JobRoundRow = { id: string; job_id: string; kind: string; position: number; pass_threshold: number };
+
+export function insertJobRound(jobId: string, kind: string, position: number, passThreshold: number) {
+  const jobRound = { id: generateId(), jobId, kind, position, passThreshold };
+  getDb()
+    .prepare('INSERT INTO job_rounds (id, job_id, kind, position, pass_threshold) VALUES (?, ?, ?, ?, ?)')
+    .run(jobRound.id, jobRound.jobId, jobRound.kind, jobRound.position, jobRound.passThreshold);
+  return jobRound;
+}
+
+export function listJobRounds(jobId: string) {
+  const rows = getDb().prepare('SELECT * FROM job_rounds WHERE job_id = ? ORDER BY position ASC').all(jobId) as JobRoundRow[];
+  return rows.map(r => ({ id: r.id, jobId: r.job_id, kind: r.kind, position: r.position, passThreshold: r.pass_threshold }));
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Questions                                   */
+/* -------------------------------------------------------------------------- */
+
+type QuestionRow = { id: string; category: string; question_type: string; content: string; metadata_json: string; created_by: string; created_at: string };
+
+export function insertQuestion(data: { category: string; questionType: string; content: string; metadataJson: string; createdBy: string }) {
+  const question = { ...data, id: generateId(), createdAt: now() };
+  getDb()
+    .prepare('INSERT INTO questions (id, category, question_type, content, metadata_json, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(question.id, question.category, question.questionType, question.content, question.metadataJson, question.createdBy, question.createdAt);
+  return question;
+}
+
+export function listQuestionsByCategory(category: string) {
+  const rows = getDb().prepare('SELECT * FROM questions WHERE category = ? ORDER BY created_at DESC').all(category) as QuestionRow[];
+  return rows.map(r => ({ id: r.id, category: r.category, questionType: r.question_type, content: r.content, metadataJson: r.metadata_json, createdBy: r.created_by, createdAt: r.created_at }));
+}
+
+export function listAllQuestions() {
+  const rows = getDb().prepare('SELECT * FROM questions ORDER BY created_at DESC').all() as QuestionRow[];
+  return rows.map(r => ({ id: r.id, category: r.category, questionType: r.question_type, content: r.content, metadataJson: r.metadata_json, createdBy: r.created_by, createdAt: r.created_at }));
 }
 
 /* -------------------------------------------------------------------------- */

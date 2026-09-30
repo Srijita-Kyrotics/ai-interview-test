@@ -78,7 +78,19 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
               </li>
             ))}
           </ol>
-        </>
+      )}
+
+      {state.proctoringEvents && state.proctoringEvents.length > 0 && (
+        <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee2e2', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
+          <h4 style={{ margin: 0, color: '#991b1b', fontSize: '1rem' }}>Proctoring Alerts</h4>
+          <ul style={{ paddingLeft: '1.25rem', marginTop: '0.5rem', fontSize: '0.9rem', color: '#7f1d1d' }}>
+            {state.proctoringEvents.map((event, i) => (
+              <li key={i}>
+                <strong>{event.eventType}</strong> at {formatDateTime(event.timestamp)}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {!scored && state.status === 'in_progress' && (

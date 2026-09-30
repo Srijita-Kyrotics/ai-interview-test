@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS recruiters (
   company TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS admins (
+  id         TEXT PRIMARY KEY,
+  email      TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id          TEXT PRIMARY KEY,
   type        TEXT NOT NULL CHECK (type IN ('job', 'internship')),
@@ -41,6 +47,15 @@ CREATE TABLE IF NOT EXISTS job_skills (
   skill    TEXT NOT NULL,
   position INTEGER NOT NULL,
   PRIMARY KEY (job_id, skill)
+);
+
+CREATE TABLE IF NOT EXISTS job_rounds (
+  id             TEXT PRIMARY KEY,
+  job_id         TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL,
+  position       INTEGER NOT NULL,
+  pass_threshold REAL NOT NULL,
+  UNIQUE (job_id, kind)
 );
 
 CREATE TABLE IF NOT EXISTS applications (
@@ -79,6 +94,23 @@ CREATE TABLE IF NOT EXISTS rounds (
   UNIQUE (application_id, kind)
 );
 
+CREATE TABLE IF NOT EXISTS proctoring_events (
+  id         TEXT PRIMARY KEY,
+  round_id   TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  timestamp  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+  id                 TEXT PRIMARY KEY,
+  category           TEXT NOT NULL,
+  question_type      TEXT NOT NULL,
+  content            TEXT NOT NULL,
+  metadata_json      TEXT NOT NULL DEFAULT '{}',
+  created_by         TEXT NOT NULL,
+  created_at         TEXT NOT NULL
+);
+
 -- Answers store their own evaluation, so a result stays readable even if the
 -- question bank or the evaluator changes later.
 CREATE TABLE IF NOT EXISTS round_answers (
@@ -91,6 +123,7 @@ CREATE TABLE IF NOT EXISTS round_answers (
   max_score    REAL NOT NULL,
   feedback     TEXT NOT NULL,
   signals_json TEXT NOT NULL DEFAULT '[]',
+  audio_url    TEXT,
   UNIQUE (round_id, question_id)
 );
 
@@ -116,6 +149,15 @@ function migrate(db: DatabaseSync) {
   };
   if (current >= SCHEMA_VERSION) return;
   db.exec(SCHEMA);
+
+  if (current > 0 && current < 3) {
+    try {
+      db.exec("ALTER TABLE round_answers ADD COLUMN audio_url TEXT;");
+    } catch (e) {
+      // Column might already exist if migration was partially run
+    }
+  }
+
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 

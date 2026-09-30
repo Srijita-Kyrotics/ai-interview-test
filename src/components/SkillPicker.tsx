@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getSkillSuggestions } from '@/lib/actions';
+import { rankSkillSuggestions, STANDARD_SKILLS } from '@/lib/types';
 import type { Skill } from '@/lib/types';
 
 type SkillPickerProps = {
@@ -23,25 +23,13 @@ export default function SkillPicker({
   onChange,
 }: SkillPickerProps) {
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<Skill[]>([]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const term = query.trim();
-    if (!term) return;
-    let cancelled = false;
-    getSkillSuggestions(term).then(results => {
-      if (cancelled) return;
-      setSuggestions(results.filter(s => !selected.includes(s)));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [query, selected]);
-
-  // Derived rather than stored so clearing the box never needs a reset effect.
-  const visibleSuggestions = query.trim() ? suggestions : [];
+  // Derived synchronously so there's no network delay when typing fast.
+  const visibleSuggestions = query.trim()
+    ? rankSkillSuggestions(STANDARD_SKILLS, query).filter(s => !selected.includes(s))
+    : [];
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -54,7 +42,6 @@ export default function SkillPicker({
   function addSkill(skill: Skill) {
     if (!selected.includes(skill)) onChange([...selected, skill]);
     setQuery('');
-    setSuggestions([]);
   }
 
   function removeSkill(skill: Skill) {

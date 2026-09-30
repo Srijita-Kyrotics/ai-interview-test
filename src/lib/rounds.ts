@@ -40,6 +40,8 @@ export function buildRoundState(
     secondsRemaining = Math.max(0, definition.timeLimitSec - elapsed);
   }
 
+  const proctoringEvents = row ? roundsRepo.listProctoringEvents(row.id) : [];
+
   return {
     id: row?.id ?? null,
     applicationId: application.id,
@@ -54,6 +56,7 @@ export function buildRoundState(
     passThreshold: definition.passThreshold,
     answers,
     secondsRemaining,
+    proctoringEvents,
   };
 }
 

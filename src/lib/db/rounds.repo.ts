@@ -40,20 +40,21 @@ function parseSignals(json: string): EvaluationSignal[] {
 
 export function findRoundById(id: string): RoundRow | null {
   const row = getDb().prepare('SELECT * FROM rounds WHERE id = ?').get(id) as RoundRow | undefined;
-  return row ?? null;
+  return row ? { ...row } : null;
 }
 
 export function findRound(applicationId: string, kind: RoundKind): RoundRow | null {
   const row = getDb()
     .prepare('SELECT * FROM rounds WHERE application_id = ? AND kind = ?')
     .get(applicationId, kind) as RoundRow | undefined;
-  return row ?? null;
+  return row ? { ...row } : null;
 }
 
 export function listRoundsForApplication(applicationId: string): RoundRow[] {
-  return getDb()
+  const rows = getDb()
     .prepare('SELECT * FROM rounds WHERE application_id = ? ORDER BY started_at')
     .all(applicationId) as RoundRow[];
+  return rows.map(r => ({ ...r }));
 }
 
 export function startRound(applicationId: string, kind: RoundKind): RoundRow {
@@ -62,7 +63,7 @@ export function startRound(applicationId: string, kind: RoundKind): RoundRow {
       .prepare('SELECT * FROM rounds WHERE application_id = ? AND kind = ?')
       .get(applicationId, kind) as RoundRow | undefined;
     // Re-entering a round that is already underway just hands back the same one.
-    if (existing) return existing;
+    if (existing) return { ...existing };
 
     const id = generateId();
     db.prepare(
@@ -86,7 +87,8 @@ export function resetRound(applicationId: string, kind: RoundKind): RoundRow {
       `INSERT INTO rounds (id, application_id, kind, status, score, max_score, started_at)
        VALUES (?, ?, ?, 'in_progress', 0, 0, ?)`,
     ).run(id, applicationId, kind, new Date().toISOString());
-    return db.prepare('SELECT * FROM rounds WHERE id = ?').get(id) as RoundRow;
+    const row = db.prepare('SELECT * FROM rounds WHERE id = ?').get(id) as RoundRow;
+    return { ...row };
   });
 }
 
@@ -121,6 +123,19 @@ export function saveAnswer(
       JSON.stringify(evaluation.signals),
     );
   });
+}
+
+export function recordProctoringEvent(roundId: string, eventType: string): void {
+  transact(db => {
+    db.prepare(
+      'INSERT INTO proctoring_events (id, round_id, event_type, timestamp) VALUES (?, ?, ?, ?)'
+    ).run(generateId(), roundId, eventType, new Date().toISOString());
+  });
+}
+
+export function listProctoringEvents(roundId: string) {
+  const rows = getDb().prepare('SELECT event_type, timestamp FROM proctoring_events WHERE round_id = ? ORDER BY timestamp ASC').all(roundId) as { event_type: string, timestamp: string }[];
+  return rows.map(r => ({ eventType: r.event_type, timestamp: r.timestamp }));
 }
 
 export function listAnswers(roundId: string): AnswerRecord[] {
@@ -158,5 +173,6 @@ export function scoreRound(
     ).run(status, totals.score, totals.max_score, new Date().toISOString(), roundId);
   });
 
-  return getDb().prepare('SELECT * FROM rounds WHERE id = ?').get(roundId) as RoundRow;
+  const row = getDb().prepare('SELECT * FROM rounds WHERE id = ?').get(roundId) as RoundRow;
+  return { ...row };
 }

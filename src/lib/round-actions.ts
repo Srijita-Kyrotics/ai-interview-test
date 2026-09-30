@@ -118,6 +118,12 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
   return { evaluation, state: buildRoundState(application, round.kind) };
 }
 
+export async function logProctoringEvent(roundId: string, eventType: string) {
+  const { round } = await requireOwnedRound(roundId);
+  if (round.status !== 'in_progress') return;
+  roundsRepo.recordProctoringEvent(roundId, eventType);
+}
+
 export interface RoundCompletion {
   round: RoundRow;
   state: RoundState;

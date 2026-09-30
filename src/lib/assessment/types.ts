@@ -129,4 +129,5 @@ export interface RoundState {
   answers: AnswerRecord[];
   /** Seconds left on the whole-round timer, or `null` if not started/finished. */
   secondsRemaining: number | null;
+  proctoringEvents: { eventType: string; timestamp: string }[];
 }

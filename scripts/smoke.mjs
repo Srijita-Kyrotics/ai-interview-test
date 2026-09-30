@@ -101,7 +101,7 @@ async function act(name, args, jar) {
   const realErrors = errorRows.filter(row => !row.includes('NEXT_REDIRECT'));
   if (realErrors.length > 0) {
     const digest = realErrors[0].match(/"digest":"([^"]*)"/)?.[1];
-    throw new Error(`action ${name} threw (digest ${digest ?? 'unknown'})`);
+    throw new Error(`action ${name} threw (digest ${digest ?? 'unknown'})\nRaw response:\n${text}`);
   }
   return text;
 }

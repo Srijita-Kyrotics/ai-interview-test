@@ -15,6 +15,12 @@ export interface Recruiter {
   company: string;
 }
 
+export interface Admin {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
 export const OPPORTUNITY_TYPES = ['job', 'internship'] as const;
 export type OpportunityType = (typeof OPPORTUNITY_TYPES)[number];
 
@@ -32,6 +38,31 @@ export interface Job {
   eligibility: string;
   recruiterId: string;
   createdAt: string;
+}
+
+export interface JobRound {
+  id: string;
+  jobId: string;
+  kind: string;
+  position: number;
+  passThreshold: number;
+}
+
+export interface Question {
+  id: string;
+  category: string;
+  questionType: string;
+  content: string;
+  metadataJson: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ProctoringEvent {
+  id: string;
+  roundId: string;
+  eventType: string;
+  timestamp: string;
 }
 
 export type ApplicationStage =

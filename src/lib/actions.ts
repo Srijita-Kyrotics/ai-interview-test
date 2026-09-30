@@ -29,6 +29,28 @@ export async function getSkillSuggestions(query: string) {
 /*                                   Session                                  */
 /* -------------------------------------------------------------------------- */
 
+const ADMIN_COOKIE = 'rf_admin';
+
+export async function getCurrentAdmin() {
+  const id = (await cookies()).get(ADMIN_COOKIE)?.value;
+  if (!id) return null;
+  return repo.findAdminById(id);
+}
+
+export async function startAdminSession(email: string) {
+  const admin = repo.insertAdmin(email);
+  (await cookies()).set(ADMIN_COOKIE, admin.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+  return admin;
+}
+
+export async function endAdminSession() {
+  (await cookies()).delete(ADMIN_COOKIE);
+}
+
 export async function getCurrentStudent(): Promise<Student | null> {
   const id = (await cookies()).get(STUDENT_COOKIE)?.value;
   if (!id) return null;
@@ -84,7 +106,13 @@ export async function createStudent(data: {
   github: string;
   linkedin: string;
 }) {
-  const student = repo.insertStudent(data);
+  const existing = repo.findStudentByName(data.name.trim());
+  let student;
+  if (existing) {
+    student = repo.updateStudentRow(existing.id, data);
+  } else {
+    student = repo.insertStudent(data);
+  }
   await startStudentSession(student.id);
   return student;
 }
@@ -115,6 +143,11 @@ export async function createJob(data: {
   eligibility: string;
   recruiterId: string;
 }) {
+  const recruiter = await getCurrentRecruiter();
+  if (!recruiter || recruiter.id !== data.recruiterId) {
+    throw new Error('Unauthorized to create job for this recruiter.');
+  }
+
   const job = repo.insertJob(data);
   revalidatePath('/student/jobs');
   revalidatePath('/recruiter');
@@ -180,11 +213,23 @@ export async function updateApplicationStage(
   newStage: string,
 ): Promise<Application> {
   if (!isApplicationStage(newStage)) throw new Error(`Unknown stage: ${newStage}`);
-  const application = repo.setApplicationStage(applicationId, newStage);
+  
+  const recruiter = await getCurrentRecruiter();
+  const application = repo.findApplicationById(applicationId);
+  if (!application) throw new Error('Application not found');
+  
+  if (recruiter) {
+    const job = repo.findJobById(application.jobId);
+    if (!job || job.recruiterId !== recruiter.id) {
+      throw new Error('Unauthorized to modify this application.');
+    }
+  }
+
+  const updatedApplication = repo.setApplicationStage(applicationId, newStage);
   revalidatePath('/student/dashboard');
-  revalidatePath(`/recruiter/jobs/${application.jobId}`);
+  revalidatePath(`/recruiter/jobs/${updatedApplication.jobId}`);
   revalidatePath(`/recruiter/candidates/${applicationId}`);
-  return application;
+  return updatedApplication;
 }
 
 /** Moves a candidate one step along the pipeline, or into a final stage. */
@@ -192,11 +237,38 @@ export async function advanceApplicationStage(
   applicationId: string,
   target: 'next' | 'reject' = 'next',
 ) {
+  const recruiter = await getCurrentRecruiter();
   const application = repo.findApplicationById(applicationId);
   if (!application) throw new Error('Application not found');
+  
+  if (recruiter) {
+    const job = repo.findJobById(application.jobId);
+    if (!job || job.recruiterId !== recruiter.id) {
+      throw new Error('Unauthorized to modify this application.');
+    }
+  }
+
   if (target === 'reject') return updateApplicationStage(applicationId, 'Rejected');
 
   const index = PIPELINE_STAGES.indexOf(application.stage);
   const next = PIPELINE_STAGES[index + 1] ?? 'Selected';
   return updateApplicationStage(applicationId, next);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Questions                                   */
+/* -------------------------------------------------------------------------- */
+
+export async function createQuestion(data: { category: string; questionType: string; content: string; metadataJson: string }) {
+  const admin = await getCurrentAdmin();
+  const recruiter = await getCurrentRecruiter();
+  
+  const createdBy = admin?.id || recruiter?.id;
+  if (!createdBy) {
+    throw new Error('Unauthorized to create a question.');
+  }
+
+  const question = repo.insertQuestion({ ...data, createdBy });
+  revalidatePath('/admin/questions');
+  return question;
 }

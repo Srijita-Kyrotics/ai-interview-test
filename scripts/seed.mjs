@@ -57,10 +57,38 @@ repo.insertApplication({
   matchedSkills: match.matched,
 });
 
+const admin = repo.insertAdmin('admin@superset.ai');
+
+repo.insertQuestion({
+  category: 'Communication',
+  questionType: 'text',
+  content: 'Please introduce yourself and explain why you are interested in this role.',
+  metadataJson: JSON.stringify({ maxScore: 10 }),
+  createdBy: admin.id
+});
+
+repo.insertQuestion({
+  category: 'Communication',
+  questionType: 'voice_repeat',
+  content: 'Listen carefully and repeat the sentence.',
+  metadataJson: JSON.stringify({ maxScore: 10, textToSpeak: 'The quick brown fox jumps over the lazy dog.' }),
+  createdBy: admin.id
+});
+
+repo.insertQuestion({
+  category: 'Communication',
+  questionType: 'voice_open',
+  content: 'Speak for 30 seconds about your favorite technology.',
+  metadataJson: JSON.stringify({ maxScore: 10 }),
+  createdBy: admin.id
+});
+
 console.log('Seeded:');
 console.log(`  recruiter  ${recruiter.name} (${recruiter.company})`);
 console.log('  jobs       Backend Developer Intern + Full Stack Engineer');
 console.log(`  student    ${student.name}`);
 console.log(`  applicant  at Communication, ${match.score}% skill match`);
+console.log(`  questions  3 questions created by admin@superset.ai`);
 console.log('');
 console.log('Sign in as recruiter: Priya Sharma / Acme Corp');
+console.log('Sign in as admin: admin@superset.ai (at /admin)');
