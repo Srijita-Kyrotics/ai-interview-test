@@ -78,6 +78,7 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
               </li>
             ))}
           </ol>
+        </>
       )}
 
       {state.proctoringEvents && state.proctoringEvents.length > 0 && (
