@@ -11,6 +11,7 @@ type StudentProfileFormProps = {
   studentId?: string;
   initial?: {
     name: string;
+    password?: string;
     github: string;
     linkedin: string;
     skills: Skill[];
@@ -18,7 +19,7 @@ type StudentProfileFormProps = {
   submitLabel: string;
 };
 
-const EMPTY = { name: '', github: '', linkedin: '', skills: [] as Skill[] };
+const EMPTY = { name: '', password: '', github: '', linkedin: '', skills: [] as Skill[] };
 
 export default function StudentProfileForm({
   studentId,
@@ -54,16 +55,32 @@ export default function StudentProfileForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="form-group">
-        <label htmlFor="name">Full name</label>
-        <input
-          id="name"
-          required
-          maxLength={80}
-          value={values.name}
-          onChange={e => set('name', e.target.value)}
-          placeholder="John Doe"
-        />
+      <div className="row-2">
+        <div className="form-group">
+          <label htmlFor="name">Full name</label>
+          <input
+            id="name"
+            required
+            maxLength={80}
+            value={values.name}
+            onChange={e => set('name', e.target.value)}
+            placeholder="John Doe"
+          />
+        </div>
+        {!studentId && (
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              required
+              maxLength={80}
+              value={values.password}
+              onChange={e => set('password', e.target.value)}
+              placeholder="Enter password"
+            />
+          </div>
+        )}
       </div>
 
       <div className="row-2">

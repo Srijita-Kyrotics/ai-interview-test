@@ -78,11 +78,30 @@ export async function getCurrentRecruiter(): Promise<Recruiter | null> {
 export async function signInRecruiter(name: string, company: string) {
   const trimmedName = name.trim();
   const trimmedCompany = company.trim();
-  // Reuse an existing recruiter with the same details so signing in again
-  // returns you to your own roles instead of creating an empty duplicate.
-  const recruiter =
-    repo.findRecruiterByName(trimmedName, trimmedCompany) ??
-    repo.insertRecruiter(trimmedName, trimmedCompany);
+  const recruiter = repo.findRecruiterByName(trimmedName, trimmedCompany);
+  
+  if (!recruiter) {
+    throw new Error('Recruiter not found. Please create a profile.');
+  }
+
+  (await cookies()).set(RECRUITER_COOKIE, recruiter.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+  return recruiter;
+}
+
+export async function signUpRecruiter(name: string, company: string) {
+  const trimmedName = name.trim();
+  const trimmedCompany = company.trim();
+  const existing = repo.findRecruiterByName(trimmedName, trimmedCompany);
+  
+  if (existing) {
+    throw new Error('Recruiter already exists. Please sign in.');
+  }
+  
+  const recruiter = repo.insertRecruiter(trimmedName, trimmedCompany);
 
   (await cookies()).set(RECRUITER_COOKIE, recruiter.id, {
     httpOnly: true,
@@ -100,19 +119,31 @@ export async function endRecruiterSession() {
 /*                                  Students                                  */
 /* -------------------------------------------------------------------------- */
 
+export async function signInStudent(name: string, password?: string) {
+  const student = repo.findStudentByName(name.trim());
+  if (!student) {
+    throw new Error('Student not found. Please create a profile.');
+  }
+  if (student.password && student.password !== password) {
+    throw new Error('Incorrect password.');
+  }
+  await startStudentSession(student.id);
+  return student;
+}
+
 export async function createStudent(data: {
   name: string;
+  password?: string;
   skills: Skill[];
   github: string;
   linkedin: string;
 }) {
   const existing = repo.findStudentByName(data.name.trim());
-  let student;
   if (existing) {
-    student = repo.updateStudentRow(existing.id, data);
-  } else {
-    student = repo.insertStudent(data);
+    throw new Error('Student already exists. Please sign in.');
   }
+  
+  const student = repo.insertStudent(data);
   await startStudentSession(student.id);
   return student;
 }

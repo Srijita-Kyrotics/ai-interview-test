@@ -100,7 +100,7 @@ export default async function StudentDashboardPage() {
                     r => r.status === 'passed' || r.status === 'failed',
                   );
                   return (
-                    <div className="round-summary">
+                    <div className="round-summary" style={{ marginTop: '1.5rem' }}>
                       <div className="round-summary-list">
                         {done.map(round => (
                           <Link

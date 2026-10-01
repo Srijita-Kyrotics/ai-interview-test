@@ -2,12 +2,13 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
   id         TEXT PRIMARY KEY,
   name       TEXT NOT NULL,
+  password   TEXT NOT NULL DEFAULT '',
   github     TEXT NOT NULL DEFAULT '',
   linkedin   TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
@@ -155,6 +156,14 @@ function migrate(db: DatabaseSync) {
       db.exec("ALTER TABLE round_answers ADD COLUMN audio_url TEXT;");
     } catch (e) {
       // Column might already exist if migration was partially run
+    }
+  }
+
+  if (current > 0 && current < 4) {
+    try {
+      db.exec("ALTER TABLE students ADD COLUMN password TEXT NOT NULL DEFAULT '';");
+    } catch (e) {
+      // Column might already exist
     }
   }
 

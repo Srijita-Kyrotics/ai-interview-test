@@ -22,6 +22,7 @@ export function generateId(): string {
 type StudentRow = {
   id: string;
   name: string;
+  password?: string;
   github: string;
   linkedin: string;
   created_at: string;
@@ -31,6 +32,7 @@ function toStudent(row: StudentRow, skills: string[]): Student {
   return {
     id: row.id,
     name: row.name,
+    password: row.password,
     github: row.github,
     linkedin: row.linkedin,
     createdAt: row.created_at,
@@ -63,15 +65,17 @@ export function findStudentByName(name: string): Student | null {
 
 export function insertStudent(data: {
   name: string;
+  password?: string;
   skills: string[];
   github: string;
   linkedin: string;
 }): Student {
   const student: Student = { ...data, id: generateId(), createdAt: now() };
   transact(db => {
-    db.prepare('INSERT INTO students (id, name, github, linkedin, created_at) VALUES (?, ?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO students (id, name, password, github, linkedin, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
       student.id,
       student.name,
+      student.password || '',
       student.github,
       student.linkedin,
       student.createdAt,

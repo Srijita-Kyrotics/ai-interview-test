@@ -13,7 +13,7 @@ export default function SiteHeader({ isStudent, isRecruiter }: { isStudent: bool
       <div className="site-header-inner">
         <Link href="/" className="brand">
           <span className="brand-mark" aria-hidden="true" style={{ background: 'linear-gradient(135deg, var(--accent), #8b5cf6)' }}>
-            S
+            R
           </span>
           RecruitFlow
         </Link>

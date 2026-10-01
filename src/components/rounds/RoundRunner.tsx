@@ -7,6 +7,7 @@ import {
   startAssessmentRound,
   submitRoundAnswer,
   logProctoringEvent,
+  generateDynamicPrompt,
 } from '@/lib/round-actions';
 import type {
   AnswerEvaluation,
@@ -52,10 +53,63 @@ export function RoundRunner({
   const [advancedTo, setAdvancedTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(initialState.secondsRemaining);
+  const [dynamicPrompt, setDynamicPrompt] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const [, startTransition] = useTransition();
   const closingRef = useRef(false);
 
   const question = definition.questions[index];
+  
+  useEffect(() => {
+    if (phase !== 'active' || !question || question.kind !== 'communication' || !state.id) return;
+    setDynamicPrompt(null);
+    let active = true;
+    generateDynamicPrompt(state.id, question.id).then(res => {
+      if (active) setDynamicPrompt(res);
+    }).catch(err => {
+      if (active) setDynamicPrompt('Error loading prompt from AI.');
+    });
+    return () => { active = false; };
+  }, [phase, question, state.id]);
+  
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('Speech recognition is not supported in this browser.');
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+        if (finalTranscript) {
+          setDraft(prev => prev + finalTranscript);
+        }
+      };
+      recognition.onend = () => setIsRecording(false);
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsRecording(true);
+    }
+  }, [isRecording]);
+  
+  const speakPrompt = useCallback(() => {
+    const textToSpeak = dynamicPrompt || question?.prompt;
+    if (!textToSpeak) return;
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    window.speechSynthesis.speak(utterance);
+  }, [dynamicPrompt, question]);
   const total = definition.questions.length;
   const isLast = index === total - 1;
   const answeredCount = state.answers.length;
@@ -129,6 +183,10 @@ export function RoundRunner({
         setState(result.state);
         setLastEvaluation(result.evaluation);
         setDraft('');
+        if (isRecording) {
+          recognitionRef.current?.stop();
+          setIsRecording(false);
+        }
         setIndex(prev => Math.min(prev + 1, total - 1));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not submit that answer.');
@@ -296,11 +354,22 @@ export function RoundRunner({
       )}
 
       <section className="card round-card">
-        <h2 className="round-question">{question.prompt}</h2>
+        <h2 className="round-question">
+          {question.kind === 'communication' ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
+        </h2>
         {question.hint && <p className="round-hint">{question.hint}</p>}
+        
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+          <button type="button" className="btn-secondary" onClick={speakPrompt}>
+            🔊 Speak Question
+          </button>
+          <button type="button" className={isRecording ? "btn-primary" : "btn-secondary"} onClick={toggleRecording}>
+            {isRecording ? '⏹️ Stop Recording' : '🎤 Start Recording'}
+          </button>
+        </div>
 
         <label className="round-label" htmlFor="round-answer">
-          Your answer
+          Your answer (spoken or typed)
         </label>
         <textarea
           id="round-answer"
@@ -308,7 +377,7 @@ export function RoundRunner({
           value={draft}
           onChange={event => setDraft(event.target.value)}
           rows={9}
-          placeholder="Type your answer here…"
+          placeholder={isRecording ? "Listening..." : "Type your answer here or use the microphone..."}
           disabled={secondsLeft === 0}
         />
         <div className="round-textarea-meta">

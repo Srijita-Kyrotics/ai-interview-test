@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInRecruiter } from '@/lib/actions';
+import { signInRecruiter, signUpRecruiter } from '@/lib/actions';
 
 export default function RecruiterSignIn() {
   const router = useRouter();
@@ -10,16 +10,21 @@ export default function RecruiterSignIn() {
   const [company, setCompany] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [isSignIn, setIsSignIn] = useState(true);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     startTransition(async () => {
       try {
-        await signInRecruiter(name, company);
+        if (isSignIn) {
+          await signInRecruiter(name, company);
+        } else {
+          await signUpRecruiter(name, company);
+        }
         router.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not sign you in.');
+        setError(e instanceof Error ? e.message : 'Something went wrong.');
       }
     });
   }
@@ -27,9 +32,11 @@ export default function RecruiterSignIn() {
   return (
     <div className="container container-narrow">
       <div className="card">
-        <h1>Recruiter sign in</h1>
+        <h1>{isSignIn ? 'Recruiter sign in' : 'Create recruiter profile'}</h1>
         <p className="lead-muted">
-          Sign in to post roles and manage your hiring pipeline.
+          {isSignIn 
+            ? 'Sign in to manage your hiring pipeline.' 
+            : 'Sign up to post roles and manage your hiring pipeline.'}
         </p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -59,9 +66,18 @@ export default function RecruiterSignIn() {
               {error}
             </p>
           )}
-          <button type="submit" className="btn-primary btn-lg" disabled={pending}>
-            {pending ? 'Signing in...' : 'Sign in'}
-          </button>
+          <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+            <button type="submit" className="btn-primary btn-lg" disabled={pending}>
+              {pending ? (isSignIn ? 'Signing in...' : 'Creating profile...') : (isSignIn ? 'Sign in' : 'Create profile')}
+            </button>
+            <button 
+              type="button" 
+              className="btn-ghost" 
+              onClick={() => { setIsSignIn(!isSignIn); setError(null); }}
+            >
+              {isSignIn ? "Don't have an account? Create profile" : "Already have an account? Sign in"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

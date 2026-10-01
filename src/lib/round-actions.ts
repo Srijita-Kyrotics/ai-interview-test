@@ -1,8 +1,10 @@
 'use server';
 
 import { refresh } from 'next/cache';
+import { generateOpenRouterCompletion } from '@/lib/ai/openrouter';
 
 import * as repo from '@/lib/db/repo';
+import { getDb } from '@/lib/db/index';
 import * as roundsRepo from '@/lib/db/rounds.repo';
 import type { RoundRow } from '@/lib/db/rounds.repo';
 import { getQuestion, getRoundDefinition, isRoundBuilt, isRoundKind } from '@/lib/assessment/registry';
@@ -111,7 +113,44 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
   const text = answer.trim();
   if (!text) throw new Error('Please write an answer before submitting.');
 
-  const evaluation = definition.evaluate({ question, answer: text });
+  let evaluation: any = { score: 0, maxScore: 10, feedback: '', signals: [] };
+
+  if (round.kind === 'communication') {
+    const dynamicQ = getDb().prepare('SELECT * FROM questions WHERE id = ?').get(`${round.id}_${questionId}`) as any;
+    if (!dynamicQ) throw new Error('Question not found. Did it fail to generate?');
+    const qData = JSON.parse(dynamicQ.metadata_json);
+    
+    // Evaluate via AI
+    const evalPrompt = `Evaluate the candidate's answer to this question:
+Question: ${qData.question}
+Correct Answer/Criteria: ${qData.correct_answer || qData.evaluation_criteria}
+Candidate Answer: ${text}
+
+Provide JSON with:
+{
+  "score": <number 0 to 10>,
+  "feedback": "<string feedback for candidate>",
+  "signals": [
+    {"label": "<string>", "detail": "<string>", "level": "<good | ok | poor>"}
+  ]
+}`;
+    try {
+      const aiResponse = await generateOpenRouterCompletion(evalPrompt, 'You are an expert interviewer evaluating a candidate. Return ONLY valid JSON.', true);
+      const parsed = JSON.parse(aiResponse);
+      evaluation = {
+        score: typeof parsed.score === 'number' ? parsed.score : 0,
+        maxScore: 10,
+        feedback: parsed.feedback || 'Evaluated.',
+        signals: parsed.signals || []
+      };
+    } catch (e) {
+      console.error(e);
+      evaluation = { score: 5, maxScore: 10, feedback: 'AI Evaluation failed, default score applied.', signals: [] };
+    }
+  } else {
+    evaluation = definition.evaluate({ question, answer: text });
+  }
+
   roundsRepo.saveAnswer(round.id, question.id, question.position, text, evaluation);
 
   refresh();
@@ -122,6 +161,40 @@ export async function logProctoringEvent(roundId: string, eventType: string) {
   const { round } = await requireOwnedRound(roundId);
   if (round.status !== 'in_progress') return;
   roundsRepo.recordProctoringEvent(roundId, eventType);
+}
+
+export async function generateDynamicPrompt(roundId: string, sectionId: string): Promise<string> {
+  const existing = getDb().prepare('SELECT * FROM questions WHERE id = ?').get(`${roundId}_${sectionId}`) as any;
+  if (existing) {
+    const parsed = JSON.parse(existing.content);
+    return parsed.question;
+  }
+
+  let instruction = '';
+  if (sectionId === 'grammar') {
+    instruction = "Generate an English grammar question. It can be subject-verb agreement, articles, etc. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"grammar\"}";
+  } else if (sectionId === 'tenses') {
+    instruction = "Generate a question testing English tenses. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"tenses\"}";
+  } else if (sectionId === 'fill-blank') {
+    instruction = "Generate a fill in the missing word sentence. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"vocabulary\"}";
+  } else if (sectionId === 'listen-speak') {
+    instruction = "Generate a short scenario or conversational statement for a tech interview listening/speaking test. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'essay') {
+    instruction = "Generate a short essay prompt (non-technical). Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else {
+    return 'Default prompt';
+  }
+  
+  try {
+    const aiResponse = await generateOpenRouterCompletion(instruction, 'You are an assessment generator. Return ONLY valid JSON.', true);
+    const parsed = JSON.parse(aiResponse);
+    getDb().prepare('INSERT INTO questions (id, category, question_type, content, metadata_json, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(`${roundId}_${sectionId}`, 'communication_dynamic', sectionId, JSON.stringify(parsed), JSON.stringify(parsed), 'system', new Date().toISOString());
+    return parsed.question;
+  } catch (e) {
+    console.error(e);
+    return 'Error generating question. Please try again.';
+  }
 }
 
 export interface RoundCompletion {
