@@ -62,7 +62,7 @@ export function RoundRunner({
   const question = definition.questions[index];
   
   useEffect(() => {
-    if (phase !== 'active' || !question || question.kind !== 'communication' || !state.id) return;
+    if (phase !== 'active' || !question || (question.kind !== 'communication' && question.kind !== 'aptitude') || !state.id) return;
     setDynamicPrompt(null);
     let active = true;
     generateDynamicPrompt(state.id, question.id).then(res => {
@@ -355,7 +355,7 @@ export function RoundRunner({
 
       <section className="card round-card">
         <h2 className="round-question">
-          {question.kind === 'communication' ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
+          {(question.kind === 'communication' || question.kind === 'aptitude') ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
         </h2>
         {question.hint && <p className="round-hint">{question.hint}</p>}
         

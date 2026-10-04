@@ -115,7 +115,7 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
 
   let evaluation: any = { score: 0, maxScore: 10, feedback: '', signals: [] };
 
-  if (round.kind === 'communication') {
+  if (round.kind === 'communication' || round.kind === 'aptitude') {
     const dynamicQ = getDb().prepare('SELECT * FROM questions WHERE id = ?').get(`${round.id}_${questionId}`) as any;
     if (!dynamicQ) throw new Error('Question not found. Did it fail to generate?');
     const qData = JSON.parse(dynamicQ.metadata_json);
@@ -181,6 +181,16 @@ export async function generateDynamicPrompt(roundId: string, sectionId: string):
     instruction = "Generate a short scenario or conversational statement for a tech interview listening/speaking test. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
   } else if (sectionId === 'essay') {
     instruction = "Generate a short essay prompt (non-technical). Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'logical-reasoning') {
+    instruction = "Generate a logical reasoning question for an aptitude test. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"logic\"}";
+  } else if (sectionId === 'numerical-ability') {
+    instruction = "Generate a numerical ability math question for an aptitude test. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"math\"}";
+  } else if (sectionId === 'data-interpretation') {
+    instruction = "Generate a data interpretation question, providing a small set of data and a question about it. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"data\"}";
+  } else if (sectionId === 'spatial-reasoning') {
+    instruction = "Generate a text-based spatial reasoning puzzle or scenario. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"spatial\"}";
+  } else if (sectionId === 'pattern-recognition') {
+    instruction = "Generate a pattern recognition sequence question (e.g. number or letter series). Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"pattern\"}";
   } else {
     return 'Default prompt';
   }
@@ -189,7 +199,7 @@ export async function generateDynamicPrompt(roundId: string, sectionId: string):
     const aiResponse = await generateOpenRouterCompletion(instruction, 'You are an assessment generator. Return ONLY valid JSON.', true);
     const parsed = JSON.parse(aiResponse);
     getDb().prepare('INSERT INTO questions (id, category, question_type, content, metadata_json, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(`${roundId}_${sectionId}`, 'communication_dynamic', sectionId, JSON.stringify(parsed), JSON.stringify(parsed), 'system', new Date().toISOString());
+      .run(`${roundId}_${sectionId}`, 'dynamic_ai', sectionId, JSON.stringify(parsed), JSON.stringify(parsed), 'system', new Date().toISOString());
     return parsed.question;
   } catch (e) {
     console.error(e);

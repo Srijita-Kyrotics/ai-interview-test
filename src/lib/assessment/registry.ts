@@ -1,4 +1,5 @@
 import { communicationQuestions } from './questions/communication';
+import { aptitudeQuestions } from './questions/aptitude';
 import { evaluateCommunicationAnswer } from './evaluators/communication';
 import type { AnswerEvaluation, RoundDefinition, RoundKind, RoundQuestion } from './types';
 
@@ -32,7 +33,26 @@ const definitions: Record<RoundKind, RoundDefinition> = {
   },
 
   // --- Registered but not built yet. The runner will say so explicitly. ---
-  aptitude: notBuilt('aptitude', 'Aptitude', 'Aptitude', 'Technical 1'),
+  aptitude: {
+    kind: 'aptitude',
+    title: 'Aptitude Round',
+    shortTitle: 'Aptitude',
+    stage: 'Aptitude',
+    passesTo: 'Technical 1',
+    summary: 'Five questions testing logical, numerical, and reasoning abilities.',
+    instructions: [
+      'Answer all five questions.',
+      'Use logical thinking to arrive at the solution.',
+      'The evaluator scores your reasoning and final answer.',
+      'Your answer is assessed as soon as you submit it, so you cannot revise it afterwards.',
+      'The round is timed. If the timer runs out the round closes with whatever you have submitted.'
+    ],
+    timeLimitSec: 20 * 60,
+    passThreshold: 60,
+    maxScorePerAnswer: 10,
+    questions: aptitudeQuestions,
+    evaluate: ({ question, answer }): AnswerEvaluation => ({ score: 0, maxScore: 10, feedback: '', signals: [] }), // Evaluated dynamically via AI
+  },
   technical1: notBuilt('technical1', 'Technical Round 1', 'Technical 1', 'Technical 2'),
   technical2: notBuilt('technical2', 'Technical Round 2', 'Technical 2', 'HR'),
   hr: notBuilt('hr', 'HR Round', 'HR', 'Selected'),
