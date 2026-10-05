@@ -26,6 +26,8 @@ const definitions: Record<RoundKind, RoundDefinition> = {
     ],
     timeLimitSec: 15 * 60,
     passThreshold: 60,
+    minAnswersToPass: 4,
+    proctoringFlagThreshold: 3,
     maxScorePerAnswer: 10,
     questions: communicationQuestions,
     evaluate: ({ question, answer }): AnswerEvaluation =>
@@ -49,9 +51,16 @@ const definitions: Record<RoundKind, RoundDefinition> = {
     ],
     timeLimitSec: 20 * 60,
     passThreshold: 60,
+    minAnswersToPass: 4,
+    proctoringFlagThreshold: 3,
     maxScorePerAnswer: 10,
     questions: aptitudeQuestions,
-    evaluate: ({ question, answer }): AnswerEvaluation => ({ score: 0, maxScore: 10, feedback: '', signals: [] }), // Evaluated dynamically via AI
+    // Graded in `submitRoundAnswer` against the generated question and its
+    // answer key, so there is no deterministic evaluator to fall back to.
+    // Returning a default of 0 here would quietly fail every candidate.
+    evaluate: () => {
+      throw new Error('The Aptitude evaluator is driven by the AI path in submitRoundAnswer.');
+    },
   },
   technical1: notBuilt('technical1', 'Technical Round 1', 'Technical 1', 'Technical 2'),
   technical2: notBuilt('technical2', 'Technical Round 2', 'Technical 2', 'HR'),
@@ -74,6 +83,8 @@ function notBuilt(
     instructions: [],
     timeLimitSec: 0,
     passThreshold: 0,
+    minAnswersToPass: 0,
+    proctoringFlagThreshold: 0,
     maxScorePerAnswer: 0,
     questions: [],
     evaluate: () => {

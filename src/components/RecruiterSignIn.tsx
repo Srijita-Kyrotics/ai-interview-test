@@ -8,6 +8,7 @@ export default function RecruiterSignIn() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [isSignIn, setIsSignIn] = useState(true);
@@ -18,10 +19,11 @@ export default function RecruiterSignIn() {
     startTransition(async () => {
       try {
         if (isSignIn) {
-          await signInRecruiter(name, company);
+          await signInRecruiter(name, company, password);
         } else {
-          await signUpRecruiter(name, company);
+          await signUpRecruiter(name, company, password);
         }
+        setPassword('');
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -59,6 +61,19 @@ export default function RecruiterSignIn() {
               value={company}
               onChange={e => setCompany(e.target.value)}
               placeholder="Acme Corp"
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="recruiter-password">Password</label>
+            <input
+              id="recruiter-password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete={isSignIn ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={isSignIn ? 'Your password' : 'At least 8 characters'}
             />
           </div>
           {error && (

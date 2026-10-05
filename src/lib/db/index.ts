@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
@@ -22,9 +22,10 @@ CREATE TABLE IF NOT EXISTS student_skills (
 );
 
 CREATE TABLE IF NOT EXISTS recruiters (
-  id      TEXT PRIMARY KEY,
-  name    TEXT NOT NULL,
-  company TEXT NOT NULL DEFAULT ''
+  id       TEXT PRIMARY KEY,
+  name     TEXT NOT NULL,
+  company  TEXT NOT NULL DEFAULT '',
+  password TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS admins (
@@ -91,6 +92,9 @@ CREATE TABLE IF NOT EXISTS rounds (
   max_score      REAL NOT NULL DEFAULT 0,
   started_at     TEXT NOT NULL,
   completed_at   TEXT,
+  -- set when an answer could not be auto-graded or proctoring crossed its
+  -- threshold, so a recruiter knows the result needs a human
+  flagged        INTEGER NOT NULL DEFAULT 0,
   -- a candidate can only ever sit one round of a given kind
   UNIQUE (application_id, kind)
 );
@@ -124,6 +128,8 @@ CREATE TABLE IF NOT EXISTS round_answers (
   max_score    REAL NOT NULL,
   feedback     TEXT NOT NULL,
   signals_json TEXT NOT NULL DEFAULT '[]',
+  -- 0 when the model could not grade the answer, which blocks an automatic pass
+  graded       INTEGER NOT NULL DEFAULT 1,
   audio_url    TEXT,
   UNIQUE (round_id, question_id)
 );
@@ -164,6 +170,20 @@ function migrate(db: DatabaseSync) {
       db.exec("ALTER TABLE students ADD COLUMN password TEXT NOT NULL DEFAULT '';");
     } catch (e) {
       // Column might already exist
+    }
+  }
+
+  if (current > 0 && current < 5) {
+    for (const statement of [
+      "ALTER TABLE recruiters ADD COLUMN password TEXT NOT NULL DEFAULT '';",
+      "ALTER TABLE rounds ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0;",
+      "ALTER TABLE round_answers ADD COLUMN graded INTEGER NOT NULL DEFAULT 1;",
+    ]) {
+      try {
+        db.exec(statement);
+      } catch {
+        // Column already exists if the migration was partially applied
+      }
     }
   }
 

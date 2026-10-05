@@ -69,6 +69,10 @@ export interface RoundDefinition {
   timeLimitSec: number;
   /** Percentage needed to pass. */
   passThreshold: number;
+  /** Answers that must be submitted before a pass can be awarded. */
+  minAnswersToPass: number;
+  /** Proctoring events tolerated before the round is flagged for a recruiter. */
+  proctoringFlagThreshold: number;
   /** Marks each question is worth. */
   maxScorePerAnswer: number;
   questions: RoundQuestion[];
@@ -94,6 +98,8 @@ export function toSerializable(definition: RoundDefinition): SerializableRoundDe
     instructions: definition.instructions,
     timeLimitSec: definition.timeLimitSec,
     passThreshold: definition.passThreshold,
+    minAnswersToPass: definition.minAnswersToPass,
+    proctoringFlagThreshold: definition.proctoringFlagThreshold,
     maxScorePerAnswer: definition.maxScorePerAnswer,
     questions: definition.questions,
   };
@@ -110,6 +116,10 @@ export interface AnswerRecord {
   maxScore: number;
   feedback: string;
   signals: EvaluationSignal[];
+  /** False when the model could not grade this answer. */
+  graded: boolean;
+  /** Set once the candidate's spoken answer has been stored. */
+  audioUrl: string | null;
 }
 
 export interface RoundState {
@@ -126,7 +136,15 @@ export interface RoundState {
   startedAt: string | null;
   completedAt: string | null;
   passThreshold: number;
+  /** Percentage needed to pass. */
+  minAnswersToPass: number;
+  /** Proctoring events tolerated before the round is flagged for review. */
+  proctoringFlagThreshold: number;
   answers: AnswerRecord[];
+  /** True when the round needs a human to look at it before it is trusted. */
+  flagged: boolean;
+  /** How many answers the model could not grade. */
+  answersUngraded: number;
   /** Seconds left on the whole-round timer, or `null` if not started/finished. */
   secondsRemaining: number | null;
   proctoringEvents: { eventType: string; timestamp: string }[];

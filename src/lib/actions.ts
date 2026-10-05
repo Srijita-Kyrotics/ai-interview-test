@@ -5,6 +5,12 @@ import { revalidatePath } from 'next/cache';
 
 import * as repo from '@/lib/db/repo';
 import {
+  hashPassword,
+  isLegacyPlaintextPassword,
+  validatePasswordStrength,
+  verifyPassword,
+} from '@/lib/passwords';
+import {
   DEFAULT_STAGE,
   PIPELINE_STAGES,
   STANDARD_SKILLS,
@@ -16,6 +22,15 @@ import type { Application, Job, OpportunityType, Recruiter, Skill, Student } fro
 
 const STUDENT_COOKIE = 'rf_student';
 const RECRUITER_COOKIE = 'rf_recruiter';
+
+const SECURE_COOKIES = process.env.NODE_ENV === 'production';
+
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  path: '/',
+  secure: SECURE_COOKIES,
+} as const;
 
 /* -------------------------------------------------------------------------- */
 /*                              Skill suggestions                             */
@@ -31,19 +46,36 @@ export async function getSkillSuggestions(query: string) {
 
 const ADMIN_COOKIE = 'rf_admin';
 
+/**
+ * Admin access is granted by a credential the deployment configures, not by
+ * whoever types an email. Both halves must be present and match: without them
+ * the admin area is simply closed.
+ */
+const ADMIN_EMAIL = process.env.RECRUITFLOW_ADMIN_EMAIL?.trim() ?? '';
+const ADMIN_PASSWORD = process.env.RECRUITFLOW_ADMIN_PASSWORD ?? '';
+
 export async function getCurrentAdmin() {
   const id = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (!id) return null;
   return repo.findAdminById(id);
 }
 
-export async function startAdminSession(email: string) {
-  const admin = repo.insertAdmin(email);
-  (await cookies()).set(ADMIN_COOKIE, admin.id, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-  });
+export async function startAdminSession(email: string, password: string) {
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+    throw new Error(
+      'Admin access is not configured. Set RECRUITFLOW_ADMIN_EMAIL and RECRUITFLOW_ADMIN_PASSWORD.',
+    );
+  }
+
+  const admin = repo.findAdminByEmail(email);
+  if (!admin || admin.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Incorrect email or password.');
+  }
+  if (!verifyPassword(password, ADMIN_PASSWORD)) {
+    throw new Error('Incorrect email or password.');
+  }
+
+  (await cookies()).set(ADMIN_COOKIE, admin.id, cookieOptions);
   return admin;
 }
 
@@ -58,11 +90,7 @@ export async function getCurrentStudent(): Promise<Student | null> {
 }
 
 export async function startStudentSession(studentId: string) {
-  (await cookies()).set(STUDENT_COOKIE, studentId, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-  });
+  (await cookies()).set(STUDENT_COOKIE, studentId, cookieOptions);
 }
 
 export async function endStudentSession() {
@@ -75,39 +103,43 @@ export async function getCurrentRecruiter(): Promise<Recruiter | null> {
   return repo.findRecruiterById(id);
 }
 
-export async function signInRecruiter(name: string, company: string) {
-  const trimmedName = name.trim();
-  const trimmedCompany = company.trim();
-  const recruiter = repo.findRecruiterByName(trimmedName, trimmedCompany);
-  
-  if (!recruiter) {
+/**
+ * A recruiter's account is the only thing standing between a stranger and every
+ * candidate's answers, so the password is mandatory on both sign-up and
+ * sign-in. Accounts created before hashing are upgraded on first successful
+ * sign-in.
+ */
+export async function signInRecruiter(name: string, company: string, password: string) {
+  const credentials = repo.findRecruiterCredentials(name, company);
+  if (!credentials) {
     throw new Error('Recruiter not found. Please create a profile.');
   }
+  if (!credentials.password) {
+    throw new Error('This account has no password set. Ask an admin to reset it.');
+  }
+  if (!verifyPassword(password, credentials.password)) {
+    throw new Error('Incorrect password.');
+  }
+  if (isLegacyPlaintextPassword(credentials.password)) {
+    repo.setRecruiterPassword(credentials.id, hashPassword(password));
+  }
 
-  (await cookies()).set(RECRUITER_COOKIE, recruiter.id, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-  });
-  return recruiter;
+  (await cookies()).set(RECRUITER_COOKIE, credentials.id, cookieOptions);
+  return repo.findRecruiterById(credentials.id);
 }
 
-export async function signUpRecruiter(name: string, company: string) {
+export async function signUpRecruiter(name: string, company: string, password: string) {
   const trimmedName = name.trim();
   const trimmedCompany = company.trim();
-  const existing = repo.findRecruiterByName(trimmedName, trimmedCompany);
-  
-  if (existing) {
+  const weakness = validatePasswordStrength(password);
+  if (weakness) throw new Error(weakness);
+
+  if (repo.findRecruiterByName(trimmedName, trimmedCompany)) {
     throw new Error('Recruiter already exists. Please sign in.');
   }
-  
-  const recruiter = repo.insertRecruiter(trimmedName, trimmedCompany);
 
-  (await cookies()).set(RECRUITER_COOKIE, recruiter.id, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-  });
+  const recruiter = repo.insertRecruiter(trimmedName, trimmedCompany, hashPassword(password));
+  (await cookies()).set(RECRUITER_COOKIE, recruiter.id, cookieOptions);
   return recruiter;
 }
 
@@ -119,21 +151,33 @@ export async function endRecruiterSession() {
 /*                                  Students                                  */
 /* -------------------------------------------------------------------------- */
 
-export async function signInStudent(name: string, password?: string) {
-  const student = repo.findStudentByName(name.trim());
-  if (!student) {
+/**
+ * An account with no stored password used to accept any input at all, because
+ * the check was skipped when the column was empty. Passwordless access is now
+ * impossible: a blank stored secret is refused rather than waved through.
+ */
+export async function signInStudent(name: string, password: string) {
+  const credentials = repo.findStudentCredentialsByName(name);
+  if (!credentials) {
     throw new Error('Student not found. Please create a profile.');
   }
-  if (student.password && student.password !== password) {
+  if (!credentials.password) {
+    throw new Error('This account has no password set. Create a new profile instead.');
+  }
+  if (!verifyPassword(password, credentials.password)) {
     throw new Error('Incorrect password.');
   }
-  await startStudentSession(student.id);
-  return student;
+  if (isLegacyPlaintextPassword(credentials.password)) {
+    repo.setStudentPassword(credentials.id, hashPassword(password));
+  }
+
+  await startStudentSession(credentials.id);
+  return repo.findStudentById(credentials.id);
 }
 
 export async function createStudent(data: {
   name: string;
-  password?: string;
+  password: string;
   skills: Skill[];
   github: string;
   linkedin: string;
@@ -142,8 +186,16 @@ export async function createStudent(data: {
   if (existing) {
     throw new Error('Student already exists. Please sign in.');
   }
-  
-  const student = repo.insertStudent(data);
+  const weakness = validatePasswordStrength(data.password);
+  if (weakness) throw new Error(weakness);
+
+  const student = repo.insertStudent({
+    name: data.name.trim(),
+    passwordHash: hashPassword(data.password),
+    skills: data.skills,
+    github: data.github,
+    linkedin: data.linkedin,
+  });
   await startStudentSession(student.id);
   return student;
 }

@@ -32,7 +32,6 @@ function toStudent(row: StudentRow, skills: string[]): Student {
   return {
     id: row.id,
     name: row.name,
-    password: row.password,
     github: row.github,
     linkedin: row.linkedin,
     createdAt: row.created_at,
@@ -63,19 +62,41 @@ export function findStudentByName(name: string): Student | null {
   return toStudent(row, skillsFor('student_skills', 'student_id', row.id));
 }
 
+/**
+ * The stored secret is only ever returned to a sign-in check. It is kept out of
+ * `Student` so it cannot be handed to a client component by accident.
+ */
+export function findStudentCredentialsByName(name: string): { id: string; password: string } | null {
+  const row = getDb()
+    .prepare('SELECT id, password FROM students WHERE lower(name) = lower(?)')
+    .get(name.trim()) as { id: string; password: string } | undefined;
+  return row ? { id: row.id, password: row.password ?? '' } : null;
+}
+
+export function setStudentPassword(id: string, passwordHash: string): void {
+  getDb().prepare('UPDATE students SET password = ? WHERE id = ?').run(passwordHash, id);
+}
+
 export function insertStudent(data: {
   name: string;
-  password?: string;
+  passwordHash: string;
   skills: string[];
   github: string;
   linkedin: string;
 }): Student {
-  const student: Student = { ...data, id: generateId(), createdAt: now() };
+  const student: Student = {
+    id: generateId(),
+    name: data.name,
+    github: data.github,
+    linkedin: data.linkedin,
+    createdAt: now(),
+    skills: data.skills,
+  };
   transact(db => {
     db.prepare('INSERT INTO students (id, name, password, github, linkedin, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
       student.id,
       student.name,
-      student.password || '',
+      data.passwordHash,
       student.github,
       student.linkedin,
       student.createdAt,
@@ -122,26 +143,45 @@ function writeSkills(
 /*                                 Recruiters                                 */
 /* -------------------------------------------------------------------------- */
 
-type RecruiterRow = { id: string; name: string; company: string };
+type RecruiterRow = { id: string; name: string; company: string; password?: string };
+
+function toRecruiter(row: RecruiterRow): Recruiter {
+  return { id: row.id, name: row.name, company: row.company };
+}
 
 export function findRecruiterById(id: string): Recruiter | null {
   const row = getDb().prepare('SELECT * FROM recruiters WHERE id = ?').get(id) as RecruiterRow | undefined;
-  return row ? { ...row } : null;
+  return row ? toRecruiter(row) : null;
 }
 
 export function findRecruiterByName(name: string, company: string): Recruiter | null {
   const row = getDb()
     .prepare('SELECT * FROM recruiters WHERE lower(name) = lower(?) AND lower(company) = lower(?)')
     .get(name, company) as RecruiterRow | undefined;
-  return row ? { ...row } : null;
+  return row ? toRecruiter(row) : null;
 }
 
-export function insertRecruiter(name: string, company: string): Recruiter {
+/** Sign-in only: returns the stored secret alongside the recruiter id. */
+export function findRecruiterCredentials(
+  name: string,
+  company: string,
+): { id: string; password: string } | null {
+  const row = getDb()
+    .prepare('SELECT id, password FROM recruiters WHERE lower(name) = lower(?) AND lower(company) = lower(?)')
+    .get(name.trim(), company.trim()) as { id: string; password?: string } | undefined;
+  return row ? { id: row.id, password: row.password ?? '' } : null;
+}
+
+export function insertRecruiter(name: string, company: string, passwordHash: string): Recruiter {
   const recruiter: Recruiter = { id: generateId(), name, company };
   getDb()
-    .prepare('INSERT INTO recruiters (id, name, company) VALUES (?, ?, ?)')
-    .run(recruiter.id, recruiter.name, recruiter.company);
+    .prepare('INSERT INTO recruiters (id, name, company, password) VALUES (?, ?, ?, ?)')
+    .run(recruiter.id, recruiter.name, recruiter.company, passwordHash);
   return recruiter;
+}
+
+export function setRecruiterPassword(id: string, passwordHash: string): void {
+  getDb().prepare('UPDATE recruiters SET password = ? WHERE id = ?').run(passwordHash, id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -152,6 +192,13 @@ type AdminRow = { id: string; email: string; created_at: string };
 
 export function findAdminById(id: string) {
   const row = getDb().prepare('SELECT * FROM admins WHERE id = ?').get(id) as AdminRow | undefined;
+  return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null;
+}
+
+export function findAdminByEmail(email: string) {
+  const row = getDb()
+    .prepare('SELECT * FROM admins WHERE lower(email) = lower(?)')
+    .get(email.trim()) as AdminRow | undefined;
   return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null;
 }
 

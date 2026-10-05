@@ -1147,6 +1147,25 @@ select {
   flex-wrap: wrap;
 }
 .round-card-recruiter-head h3 { margin: 0 0 0.125rem; font-size: 1rem; }
+
+/* A round the system could not score fairly; the recruiter has to read it. */
+.round-flagged {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--warning);
+  background: var(--warning-soft);
+}
+.round-flagged h4 { margin: 0 0 0.25rem; font-size: 0.9rem; color: var(--warning-text); }
+.round-flagged p { margin: 0; color: var(--warning-text); }
+
+/* Locked-in answer, so the candidate can tell it is final rather than buggy. */
+.round-submitted-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.round-review-item audio { display: block; margin: 0.5rem 0; max-width: 100%; }
 .round-scorebar {
   position: relative;
   height: 0.5rem;

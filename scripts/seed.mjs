@@ -4,12 +4,22 @@
  *   npm run db:seed
  *
  * Safe to re-run: it refuses to insert if data already exists.
+ *
+ * Demo passwords default to SEED_PASSWORD and can be overridden per account
+ * with RECRUITFLOW_SEED_RECRUITER_PASSWORD / RECRUITFLOW_SEED_STUDENT_PASSWORD.
+ * They are hashed before storage like any other credential.
  */
 import { getDb } from '../src/lib/db/index.ts';
 import * as repo from '../src/lib/db/repo.ts';
+import { hashPassword } from '../src/lib/passwords.ts';
 import { calculateSkillMatch } from '../src/lib/types.ts';
 
 const db = getDb();
+
+const DEFAULT_SEED_PASSWORD = 'seedpassword';
+const recruiterPassword =
+  process.env.RECRUITFLOW_SEED_RECRUITER_PASSWORD ?? DEFAULT_SEED_PASSWORD;
+const studentPassword = process.env.RECRUITFLOW_SEED_STUDENT_PASSWORD ?? DEFAULT_SEED_PASSWORD;
 
 const { count } = db.prepare('SELECT COUNT(*) AS count FROM jobs').get();
 if (count > 0) {
@@ -17,7 +27,11 @@ if (count > 0) {
   process.exit(0);
 }
 
-const recruiter = repo.insertRecruiter('Priya Sharma', 'Acme Corp');
+const recruiter = repo.insertRecruiter(
+  'Priya Sharma',
+  'Acme Corp',
+  hashPassword(recruiterPassword),
+);
 
 const backend = repo.insertJob({
   type: 'internship',
@@ -42,6 +56,7 @@ repo.insertJob({
 
 const student = repo.insertStudent({
   name: 'Srijita Ghorai',
+  passwordHash: hashPassword(studentPassword),
   github: 'https://github.com/srijita',
   linkedin: 'https://linkedin.com/in/srijita',
   skills: ['Python', 'SQL', 'FastAPI', 'Git', 'Machine Learning'],
@@ -90,5 +105,7 @@ console.log(`  student    ${student.name}`);
 console.log(`  applicant  at Communication, ${match.score}% skill match`);
 console.log(`  questions  3 questions created by admin@superset.ai`);
 console.log('');
-console.log('Sign in as recruiter: Priya Sharma / Acme Corp');
-console.log('Sign in as admin: admin@superset.ai (at /admin)');
+console.log(`Sign in as recruiter: Priya Sharma / Acme Corp / ${recruiterPassword}`);
+console.log(`Sign in as student:   ${student.name} / ${studentPassword}`);
+console.log('Sign in as admin: admin@superset.ai at /admin, using the password in');
+console.log('                   RECRUITFLOW_ADMIN_PASSWORD (admin access is off until set).');

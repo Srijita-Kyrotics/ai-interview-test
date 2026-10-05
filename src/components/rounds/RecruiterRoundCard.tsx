@@ -39,6 +39,19 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
         <RoundStatusBadge state={state} showScore />
       </div>
 
+      {state.flagged && (
+        <div className="round-flagged">
+          <h4>Needs manual review</h4>
+          <p className="small">
+            {state.answers.filter(a => !a.graded).length > 0 &&
+              `${state.answers.filter(a => !a.graded).length} answer(s) could not be graded by the model, `}
+            {state.answers.length < definition.minAnswersToPass &&
+              `only ${state.answers.length} of the ${definition.minAnswersToPass} required answers were submitted, `}
+            so this round was recorded as not passed rather than scored on partial input.
+          </p>
+        </div>
+      )}
+
       {scored && (
         <>
           <div className="round-scorebar">
@@ -62,11 +75,16 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
                 <div className="round-review-head">
                   <h4>{answer.prompt}</h4>
                   <span className="round-review-score">
-                    {answer.score} / {answer.maxScore}
+                    {answer.graded ? `${answer.score} / ${answer.maxScore}` : 'Not graded'}
                   </span>
                 </div>
                 <p className="round-review-answer">{answer.answer}</p>
                 <p className="round-review-feedback">{answer.feedback}</p>
+                {answer.audioUrl && (
+                  <audio controls preload="none" src={answer.audioUrl}>
+                    <a href={answer.audioUrl}>Listen to the recorded answer</a>
+                  </audio>
+                )}
                 <ul className="round-signals">
                   {answer.signals.map(signal => (
                     <li key={signal.label} className={`round-signal round-signal-${signal.level}`}>

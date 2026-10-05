@@ -14,6 +14,7 @@ type RoundRow = {
   max_score: number;
   started_at: string;
   completed_at: string | null;
+  flagged: number;
 };
 
 type AnswerRow = {
@@ -26,6 +27,8 @@ type AnswerRow = {
   max_score: number;
   feedback: string;
   signals_json: string;
+  graded: number;
+  audio_url: string | null;
 };
 
 function parseSignals(json: string): EvaluationSignal[] {
@@ -36,6 +39,59 @@ function parseSignals(json: string): EvaluationSignal[] {
     // A malformed blob should not break the candidate's result page.
     return [];
   }
+}
+
+function parseJsonObject(json: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A prompt generated for one section of one round. */
+export type GeneratedQuestion = {
+  sectionId: string;
+  /** The question text the candidate was shown. */
+  question: string;
+  /** Everything the generator returned, including the answer key. */
+  data: Record<string, unknown>;
+};
+
+export function generatedQuestionId(roundId: string, sectionId: string): string {
+  return `${roundId}_${sectionId}`;
+}
+
+export function findGeneratedQuestion(roundId: string, sectionId: string): GeneratedQuestion | null {
+  const row = getDb()
+    .prepare('SELECT question_type, content FROM questions WHERE id = ?')
+    .get(generatedQuestionId(roundId, sectionId)) as
+    | { question_type: string; content: string }
+    | undefined;
+  if (!row) return null;
+  const data = parseJsonObject(row.content);
+  const question = typeof data.question === 'string' ? data.question.trim() : '';
+  return { sectionId: row.question_type, question, data };
+}
+
+/**
+ * Generated prompts are cached per round and section. The round page can ask for
+ * the same section twice, so the insert loses the race rather than throwing.
+ */
+export function saveGeneratedQuestion(
+  roundId: string,
+  sectionId: string,
+  data: Record<string, unknown>,
+): void {
+  const payload = JSON.stringify(data);
+  getDb()
+    .prepare(
+      `INSERT INTO questions (id, category, question_type, content, metadata_json, created_by, created_at)
+       VALUES (?, 'dynamic_ai', ?, ?, ?, 'system', ?)
+       ON CONFLICT (id) DO NOTHING`,
+    )
+    .run(generatedQuestionId(roundId, sectionId), sectionId, payload, payload, new Date().toISOString());
 }
 
 export function findRoundById(id: string): RoundRow | null {
@@ -98,19 +154,20 @@ export function saveAnswer(
   position: number,
   answer: string,
   evaluation: AnswerEvaluation,
+  graded: boolean = true,
 ): void {
   transact(db => {
-    // A round is answered once; re-submitting the same question overwrites it.
     db.prepare(
       `INSERT INTO round_answers
-         (id, round_id, question_id, position, answer, score, max_score, feedback, signals_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, round_id, question_id, position, answer, score, max_score, feedback, signals_json, graded)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (round_id, question_id) DO UPDATE SET
          answer = excluded.answer,
          score = excluded.score,
          max_score = excluded.max_score,
          feedback = excluded.feedback,
-         signals_json = excluded.signals_json`,
+         signals_json = excluded.signals_json,
+         graded = excluded.graded`,
     ).run(
       generateId(),
       roundId,
@@ -121,6 +178,7 @@ export function saveAnswer(
       evaluation.maxScore,
       evaluation.feedback,
       JSON.stringify(evaluation.signals),
+      graded ? 1 : 0,
     );
   });
 }
@@ -138,23 +196,45 @@ export function listProctoringEvents(roundId: string) {
   return rows.map(r => ({ eventType: r.event_type, timestamp: r.timestamp }));
 }
 
+export function findAnswer(roundId: string, questionId: string): AnswerRecord | null {
+  const row = getDb()
+    .prepare('SELECT * FROM round_answers WHERE round_id = ? AND question_id = ?')
+    .get(roundId, questionId) as AnswerRow | undefined;
+  return row ? toAnswerRecord(row, '') : null;
+}
+
 export function listAnswers(roundId: string): AnswerRecord[] {
   const rows = getDb()
     .prepare('SELECT * FROM round_answers WHERE round_id = ? ORDER BY position')
     .all(roundId) as AnswerRow[];
-  return rows.map(row => ({
+  return rows.map(row => toAnswerRecord(row, ''));
+}
+
+function toAnswerRecord(row: AnswerRow, prompt: string): AnswerRecord {
+  return {
     id: row.id,
     questionId: row.question_id,
-    // Prompt text lives in the question bank, not here, so the bank stays the
-    // single source of truth. The answer itself is always stored verbatim.
-    prompt: '',
+    prompt,
     position: row.position,
     answer: row.answer,
     score: row.score,
     maxScore: row.max_score,
     feedback: row.feedback,
     signals: parseSignals(row.signals_json),
-  }));
+    graded: row.graded !== 0,
+    audioUrl: row.audio_url ?? null,
+  };
+}
+
+/** Attaches a recorded answer to the row once the upload succeeds. */
+export function setAnswerAudio(roundId: string, questionId: string, audioUrl: string): void {
+  getDb()
+    .prepare('UPDATE round_answers SET audio_url = ? WHERE round_id = ? AND question_id = ?')
+    .run(audioUrl, roundId, questionId);
+}
+
+export function setRoundFlagged(roundId: string, flagged: boolean): void {
+  getDb().prepare('UPDATE rounds SET flagged = ? WHERE id = ?').run(flagged ? 1 : 0, roundId);
 }
 
 export function scoreRound(

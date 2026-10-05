@@ -11,6 +11,7 @@ type StudentProfileFormProps = {
   studentId?: string;
   initial?: {
     name: string;
+    /** Only needed for sign-up; the edit form has no password field. */
     password?: string;
     github: string;
     linkedin: string;
@@ -43,7 +44,7 @@ export default function StudentProfileForm({
         if (studentId) {
           await updateStudent(studentId, values);
         } else {
-          await createStudent(values);
+          await createStudent({ ...values, password: values.password ?? '' });
         }
         router.push('/student/dashboard');
         router.refresh();
@@ -74,11 +75,15 @@ export default function StudentProfileForm({
               id="password"
               type="password"
               required
-              maxLength={80}
+              minLength={8}
+              autoComplete="new-password"
               value={values.password}
               onChange={e => set('password', e.target.value)}
-              placeholder="Enter password"
+              placeholder="At least 8 characters"
             />
+            <p className="muted" style={{ marginTop: '0.35rem' }}>
+              You will need this password to sign in again.
+            </p>
           </div>
         )}
       </div>

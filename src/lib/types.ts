@@ -3,7 +3,6 @@ export type Skill = string;
 export interface Student {
   id: string;
   name: string;
-  password?: string;
   skills: Skill[];
   github: string;
   linkedin: string;

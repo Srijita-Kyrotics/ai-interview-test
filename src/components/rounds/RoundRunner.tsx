@@ -18,6 +18,43 @@ import { RoundStatusHeadline } from './RoundStatus';
 
 type Phase = 'instructions' | 'active' | 'finished';
 
+/**
+ * The Web Speech API is not in the DOM lib yet and is prefixed in some browsers,
+ * so the two shapes this component touches are declared locally rather than
+ * reaching for `any`.
+ */
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+interface SpeechWindow {
+  SpeechRecognition?: SpeechRecognitionCtor;
+  webkitSpeechRecognition?: SpeechRecognitionCtor;
+}
+
+function getSpeechRecognition(): SpeechRecognitionCtor | null {
+  if (typeof window === 'undefined') return null;
+  const scope = window as unknown as SpeechWindow;
+  return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
+}
+
 function formatTime(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const mins = Math.floor(safe / 60);
@@ -41,9 +78,14 @@ export function RoundRunner({
   stageNow: string;
 }) {
   const [state, setState] = useState<RoundState>(initialState);
-  const [phase, setPhase] = useState<Phase>(() =>
-    initialState.status === 'in_progress' ? 'active' : initialState.answers.length > 0 ? 'finished' : 'instructions',
-  );
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (initialState.status === 'in_progress') return 'active';
+    // A round closed without a single answer still has a result to show, so a
+    // terminal status decides this rather than how many answers exist.
+    return initialState.status === 'passed' || initialState.status === 'failed'
+      ? 'finished'
+      : 'instructions';
+  });
   const [index, setIndex] = useState(() => {
     if (initialState.status !== 'in_progress') return 0;
     return Math.min(initialState.answers.length, definition.questions.length - 1);
@@ -55,38 +97,101 @@ export function RoundRunner({
   const [secondsLeft, setSecondsLeft] = useState<number | null>(initialState.secondsRemaining);
   const [dynamicPrompt, setDynamicPrompt] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const [audioNotice, setAudioNotice] = useState<string | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const [, startTransition] = useTransition();
   const closingRef = useRef(false);
 
   const question = definition.questions[index];
-  
+  const total = definition.questions.length;
+
+  // An answer is final once graded, so a question that already has one is shown
+  // read-only rather than offered for another attempt.
+  const submittedAnswer = useMemo(
+    () => state.answers.find(a => a.questionId === question?.id) ?? null,
+    [state.answers, question?.id],
+  );
+  const isSubmitted = submittedAnswer !== null;
+
   useEffect(() => {
     if (phase !== 'active' || !question || (question.kind !== 'communication' && question.kind !== 'aptitude') || !state.id) return;
-    setDynamicPrompt(null);
     let active = true;
     generateDynamicPrompt(state.id, question.id).then(res => {
       if (active) setDynamicPrompt(res);
     }).catch(err => {
-      if (active) setDynamicPrompt('Error loading prompt from AI.');
+      if (active) setDynamicPrompt(err instanceof Error ? err.message : 'Error loading prompt from AI.');
     });
     return () => { active = false; };
   }, [phase, question, state.id]);
-  
+
+  // Navigation owns the draft: moving to a question shows whatever was already
+  // submitted for it, so a revisit shows the graded answer instead of blank.
+  const goTo = useCallback((next: number) => {
+    const clamped = Math.min(Math.max(next, 0), total - 1);
+    const target = definition.questions[clamped];
+    setIndex(clamped);
+    setDynamicPrompt(null);
+    setDraft(state.answers.find(a => a.questionId === target?.id)?.answer ?? '');
+  }, [definition.questions, state.answers, total]);
+
+  const uploadAudio = useCallback(async (blob: Blob) => {
+    const roundId = state.id;
+    if (!roundId || !question) return;
+    try {
+      const res = await fetch(
+        `/api/rounds/audio?roundId=${encodeURIComponent(roundId)}&questionId=${encodeURIComponent(question.id)}`,
+        { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob },
+      );
+      setAudioNotice(res.ok ? 'Recording saved.' : 'Recording could not be saved.');
+    } catch {
+      setAudioNotice('Recording could not be saved.');
+    }
+  }, [state.id, question]);
+
+  const startRecorder = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size > 0) void uploadAudio(blob);
+        chunksRef.current = [];
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+    } catch {
+      setAudioNotice('Microphone access was blocked, so no audio was captured.');
+    }
+  }, [uploadAudio]);
+
+  const stopRecorder = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    recorderRef.current = null;
+  }, []);
+
   const toggleRecording = useCallback(() => {
+    setAudioNotice(null);
     if (isRecording) {
       recognitionRef.current?.stop();
+      stopRecorder();
       setIsRecording(false);
-    } else {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        alert('Speech recognition is not supported in this browser.');
-        return;
-      }
-      const recognition = new SpeechRecognition();
+      return;
+    }
+
+    const Recognition = getSpeechRecognition();
+    if (Recognition) {
+      const recognition = new Recognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEventLike) => {
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
@@ -100,9 +205,13 @@ export function RoundRunner({
       recognition.onend = () => setIsRecording(false);
       recognition.start();
       recognitionRef.current = recognition;
-      setIsRecording(true);
     }
-  }, [isRecording]);
+
+    // Transcript and audio are independent: a browser without speech
+    // recognition still records audio, and one without a microphone still types.
+    void startRecorder();
+    setIsRecording(true);
+  }, [isRecording, startRecorder, stopRecorder]);
   
   const speakPrompt = useCallback(() => {
     const textToSpeak = dynamicPrompt || question?.prompt;
@@ -110,7 +219,7 @@ export function RoundRunner({
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     window.speechSynthesis.speak(utterance);
   }, [dynamicPrompt, question]);
-  const total = definition.questions.length;
+
   const isLast = index === total - 1;
   const answeredCount = state.answers.length;
 
@@ -151,10 +260,16 @@ export function RoundRunner({
     if (!roundId) return;
     closingRef.current = true;
     startTransition(async () => {
-      const result = await completeAssessmentRound(roundId);
-      setState(result.state);
-      setAdvancedTo(result.advancedTo);
-      setPhase('finished');
+      try {
+        const result = await completeAssessmentRound(roundId);
+        setState(result.state);
+        setAdvancedTo(result.advancedTo);
+        setPhase('finished');
+      } catch (err) {
+        // Deliberately not clearing closingRef: retrying on a zeroed timer would
+        // loop. "Finish round" stays enabled so the candidate can retry by hand.
+        setError(err instanceof Error ? err.message : 'Time is up and the round could not be closed.');
+      }
     });
   }, [secondsLeft, phase, state.id]);
 
@@ -166,6 +281,8 @@ export function RoundRunner({
         setState(result.state);
         setSecondsLeft(result.state.secondsRemaining);
         setIndex(0);
+        setDraft('');
+        setDynamicPrompt(null);
         setPhase('active');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not start the round.');
@@ -179,20 +296,23 @@ export function RoundRunner({
     setError(null);
     startTransition(async () => {
       try {
+        // Stop capture before submitting so the recording is flushed to storage
+        // alongside the answer it belongs to.
+        if (isRecording) {
+          recognitionRef.current?.stop();
+          stopRecorder();
+          setIsRecording(false);
+        }
         const result = await submitRoundAnswer(roundId, question.id, draft);
         setState(result.state);
         setLastEvaluation(result.evaluation);
         setDraft('');
-        if (isRecording) {
-          recognitionRef.current?.stop();
-          setIsRecording(false);
-        }
-        setIndex(prev => Math.min(prev + 1, total - 1));
+        goTo(index + 1);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not submit that answer.');
       }
     });
-  }, [state.id, question, draft, total]);
+  }, [state.id, question, draft, index, isRecording, stopRecorder, goTo]);
 
   const finish = useCallback(() => {
     const roundId = state.id;
@@ -363,10 +483,20 @@ export function RoundRunner({
           <button type="button" className="btn-secondary" onClick={speakPrompt}>
             🔊 Speak Question
           </button>
-          <button type="button" className={isRecording ? "btn-primary" : "btn-secondary"} onClick={toggleRecording}>
-            {isRecording ? '⏹️ Stop Recording' : '🎤 Start Recording'}
-          </button>
+          {!isSubmitted && (
+            <button type="button" className={isRecording ? "btn-primary" : "btn-secondary"} onClick={toggleRecording}>
+              {isRecording ? '⏹️ Stop Recording' : '🎤 Start Recording'}
+            </button>
+          )}
         </div>
+
+        {audioNotice && <p className="muted" role="status">{audioNotice}</p>}
+
+        {isSubmitted && (
+          <p className="round-submitted-note" role="status">
+            Submitted and graded — this answer cannot be changed.
+          </p>
+        )}
 
         <label className="round-label" htmlFor="round-answer">
           Your answer (spoken or typed)
@@ -377,6 +507,7 @@ export function RoundRunner({
           value={draft}
           onChange={event => setDraft(event.target.value)}
           rows={9}
+          readOnly={isSubmitted}
           placeholder={isRecording ? "Listening..." : "Type your answer here or use the microphone..."}
           disabled={secondsLeft === 0}
         />
@@ -395,7 +526,7 @@ export function RoundRunner({
           <button
             type="button"
             className="btn-ghost"
-            onClick={() => setIndex(prev => Math.max(0, prev - 1))}
+            onClick={() => goTo(index - 1)}
             disabled={index === 0}
           >
             Back
@@ -408,6 +539,14 @@ export function RoundRunner({
               disabled={answeredCount === 0}
             >
               Finish round
+            </button>
+          ) : isSubmitted ? (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => goTo(index + 1)}
+            >
+              Next question
             </button>
           ) : (
             <button
