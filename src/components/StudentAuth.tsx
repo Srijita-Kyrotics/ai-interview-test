@@ -8,7 +8,7 @@ import StudentProfileForm from './StudentProfileForm';
 export default function StudentAuth() {
   const router = useRouter();
   const [isSignIn, setIsSignIn] = useState(true);
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -18,7 +18,7 @@ export default function StudentAuth() {
     setError(null);
     startTransition(async () => {
       try {
-        await signInStudent(name, password);
+        await signInStudent(email, password);
         router.push('/student/dashboard');
         router.refresh();
       } catch (e) {
@@ -56,14 +56,15 @@ export default function StudentAuth() {
       </p>
       <form onSubmit={handleSignIn}>
         <div className="form-group">
-          <label htmlFor="student-name">Your full name</label>
+          <label htmlFor="student-email">Email address</label>
           <input
-            id="student-name"
+            id="student-email"
+            type="email"
             required
-            maxLength={80}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="John Doe"
+            maxLength={120}
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="student@example.com"
           />
         </div>
         <div className="form-group">

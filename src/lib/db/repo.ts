@@ -22,6 +22,7 @@ export function generateId(): string {
 type StudentRow = {
   id: string;
   name: string;
+  email: string;
   password?: string;
   github: string;
   linkedin: string;
@@ -32,6 +33,7 @@ function toStudent(row: StudentRow, skills: string[]): Student {
   return {
     id: row.id,
     name: row.name,
+    email: row.email,
     github: row.github,
     linkedin: row.linkedin,
     createdAt: row.created_at,
@@ -62,14 +64,20 @@ export function findStudentByName(name: string): Student | null {
   return toStudent(row, skillsFor('student_skills', 'student_id', row.id));
 }
 
+export function findStudentByEmail(email: string): Student | null {
+  const row = getDb().prepare('SELECT * FROM students WHERE lower(email) = lower(?)').get(email) as StudentRow | undefined;
+  if (!row) return null;
+  return toStudent(row, skillsFor('student_skills', 'student_id', row.id));
+}
+
 /**
  * The stored secret is only ever returned to a sign-in check. It is kept out of
  * `Student` so it cannot be handed to a client component by accident.
  */
-export function findStudentCredentialsByName(name: string): { id: string; password: string } | null {
+export function findStudentCredentialsByEmail(email: string): { id: string; password: string } | null {
   const row = getDb()
-    .prepare('SELECT id, password FROM students WHERE lower(name) = lower(?)')
-    .get(name.trim()) as { id: string; password: string } | undefined;
+    .prepare('SELECT id, password FROM students WHERE lower(email) = lower(?)')
+    .get(email.trim()) as { id: string; password: string } | undefined;
   return row ? { id: row.id, password: row.password ?? '' } : null;
 }
 
@@ -79,6 +87,7 @@ export function setStudentPassword(id: string, passwordHash: string): void {
 
 export function insertStudent(data: {
   name: string;
+  email: string;
   passwordHash: string;
   skills: string[];
   github: string;
@@ -87,15 +96,17 @@ export function insertStudent(data: {
   const student: Student = {
     id: generateId(),
     name: data.name,
+    email: data.email,
     github: data.github,
     linkedin: data.linkedin,
     createdAt: now(),
     skills: data.skills,
   };
   transact(db => {
-    db.prepare('INSERT INTO students (id, name, password, github, linkedin, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO students (id, name, email, password, github, linkedin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       student.id,
       student.name,
+      student.email,
       data.passwordHash,
       student.github,
       student.linkedin,
@@ -108,11 +119,12 @@ export function insertStudent(data: {
 
 export function updateStudentRow(
   id: string,
-  data: { name: string; skills: string[]; github: string; linkedin: string },
+  data: { name: string; email: string; skills: string[]; github: string; linkedin: string },
 ): Student {
   transact(db => {
-    db.prepare('UPDATE students SET name = ?, github = ?, linkedin = ? WHERE id = ?').run(
+    db.prepare('UPDATE students SET name = ?, email = ?, github = ?, linkedin = ? WHERE id = ?').run(
       data.name,
+      data.email,
       data.github,
       data.linkedin,
       id,

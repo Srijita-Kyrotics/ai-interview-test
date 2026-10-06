@@ -25,6 +25,7 @@ export default async function StudentProfilePage() {
           studentId={student.id}
           initial={{
             name: student.name,
+            email: student.email,
             github: student.github,
             linkedin: student.linkedin,
             skills: student.skills,

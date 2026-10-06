@@ -156,8 +156,8 @@ export async function endRecruiterSession() {
  * the check was skipped when the column was empty. Passwordless access is now
  * impossible: a blank stored secret is refused rather than waved through.
  */
-export async function signInStudent(name: string, password: string) {
-  const credentials = repo.findStudentCredentialsByName(name);
+export async function signInStudent(email: string, password: string) {
+  const credentials = repo.findStudentCredentialsByEmail(email);
   if (!credentials) {
     throw new Error('Student not found. Please create a profile.');
   }
@@ -177,12 +177,13 @@ export async function signInStudent(name: string, password: string) {
 
 export async function createStudent(data: {
   name: string;
+  email: string;
   password: string;
   skills: Skill[];
   github: string;
   linkedin: string;
 }) {
-  const existing = repo.findStudentByName(data.name.trim());
+  const existing = repo.findStudentByEmail(data.email.trim());
   if (existing) {
     throw new Error('Student already exists. Please sign in.');
   }
@@ -191,6 +192,7 @@ export async function createStudent(data: {
 
   const student = repo.insertStudent({
     name: data.name.trim(),
+    email: data.email.trim(),
     passwordHash: hashPassword(data.password),
     skills: data.skills,
     github: data.github,
@@ -202,7 +204,7 @@ export async function createStudent(data: {
 
 export async function updateStudent(
   id: string,
-  data: { name: string; skills: Skill[]; github: string; linkedin: string },
+  data: { name: string; email: string; skills: Skill[]; github: string; linkedin: string },
 ) {
   const student = repo.updateStudentRow(id, data);
   revalidatePath('/student/dashboard');

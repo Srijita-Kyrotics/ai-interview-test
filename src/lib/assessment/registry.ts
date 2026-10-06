@@ -1,5 +1,7 @@
 import { communicationQuestions } from './questions/communication';
 import { aptitudeQuestions } from './questions/aptitude';
+import { technical1Questions } from './questions/technical1';
+import { technical2Questions } from './questions/technical2';
 import { evaluateCommunicationAnswer } from './evaluators/communication';
 import type { AnswerEvaluation, RoundDefinition, RoundKind, RoundQuestion } from './types';
 
@@ -62,8 +64,54 @@ const definitions: Record<RoundKind, RoundDefinition> = {
       throw new Error('The Aptitude evaluator is driven by the AI path in submitRoundAnswer.');
     },
   },
-  technical1: notBuilt('technical1', 'Technical Round 1', 'Technical 1', 'Technical 2'),
-  technical2: notBuilt('technical2', 'Technical Round 2', 'Technical 2', 'HR'),
+  technical1: {
+    kind: 'technical1',
+    title: 'Technical Round 1',
+    shortTitle: 'Technical 1',
+    stage: 'Technical 1',
+    passesTo: 'Technical 2',
+    summary: 'Three programming fundamentals and logic questions evaluated by our AI Interviewer.',
+    instructions: [
+      'Answer all three questions.',
+      'Explain your thought process clearly.',
+      'The evaluator scores your understanding and approach.',
+      'Your answer is assessed as soon as you submit it, so you cannot revise it afterwards.',
+      'The round is timed. If the timer runs out the round closes with whatever you have submitted.'
+    ],
+    timeLimitSec: 30 * 60,
+    passThreshold: 60,
+    minAnswersToPass: 2,
+    proctoringFlagThreshold: 3,
+    maxScorePerAnswer: 10,
+    questions: technical1Questions,
+    evaluate: () => {
+      throw new Error('The Technical 1 evaluator is driven by the AI path in submitRoundAnswer.');
+    },
+  },
+  technical2: {
+    kind: 'technical2',
+    title: 'Technical Round 2',
+    shortTitle: 'Technical 2',
+    stage: 'Technical 2',
+    passesTo: 'HR',
+    summary: 'Three advanced system design and coding questions evaluated by our AI Interviewer.',
+    instructions: [
+      'Answer all three questions.',
+      'Discuss trade-offs and edge cases where applicable.',
+      'The evaluator scores your system-level thinking and robust coding practices.',
+      'Your answer is assessed as soon as you submit it, so you cannot revise it afterwards.',
+      'The round is timed. If the timer runs out the round closes with whatever you have submitted.'
+    ],
+    timeLimitSec: 45 * 60,
+    passThreshold: 60,
+    minAnswersToPass: 2,
+    proctoringFlagThreshold: 3,
+    maxScorePerAnswer: 10,
+    questions: technical2Questions,
+    evaluate: () => {
+      throw new Error('The Technical 2 evaluator is driven by the AI path in submitRoundAnswer.');
+    },
+  },
   hr: notBuilt('hr', 'HR Round', 'HR', 'Selected'),
 };
 

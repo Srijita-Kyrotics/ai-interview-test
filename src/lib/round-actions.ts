@@ -158,7 +158,7 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
     signals: [],
   };
 
-  if (round.kind === 'communication' || round.kind === 'aptitude') {
+  if (round.kind === 'communication' || round.kind === 'aptitude' || round.kind === 'technical1' || round.kind === 'technical2') {
     const generated = roundsRepo.findGeneratedQuestion(round.id, questionId);
     if (!generated) throw new Error('Question not found. Did it fail to generate?');
 
@@ -266,6 +266,18 @@ export async function generateDynamicPrompt(roundId: string, sectionId: string):
     instruction = "Generate a text-based spatial reasoning puzzle or scenario. Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"spatial\"}";
   } else if (sectionId === 'pattern-recognition') {
     instruction = "Generate a pattern recognition sequence question (e.g. number or letter series). Provide JSON: {\"question\": \"...\", \"correct_answer\": \"...\", \"difficulty\": \"medium\", \"concept\": \"pattern\"}";
+  } else if (sectionId === 'tech1-fundamentals') {
+    instruction = "Generate a question about programming fundamentals (e.g. OOP, functional programming). Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'tech1-algorithms') {
+    instruction = "Generate an algorithms and data structures interview question. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'tech1-debugging') {
+    instruction = "Generate a debugging or code review question. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'tech2-system-design') {
+    instruction = "Generate a system design interview question. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'tech2-scalability') {
+    instruction = "Generate a question about application scalability or performance optimization. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'tech2-advanced-coding') {
+    instruction = "Generate an advanced software engineering problem. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
   } else {
     throw new Error(`Unknown question section: ${sectionId}`);
   }

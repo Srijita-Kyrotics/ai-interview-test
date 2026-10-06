@@ -10,7 +10,7 @@ export const ROUND_KINDS = ['communication', 'aptitude', 'technical1', 'technica
 export type RoundKind = (typeof ROUND_KINDS)[number];
 
 /** Rounds that currently have questions and an evaluator wired up. */
-export const ACTIVE_ROUND_KINDS: RoundKind[] = ['communication', 'aptitude'];
+export const ACTIVE_ROUND_KINDS: RoundKind[] = ['communication', 'aptitude', 'technical1', 'technical2'];
 
 /**
  * `locked` is derived, not stored: a round is locked until the application

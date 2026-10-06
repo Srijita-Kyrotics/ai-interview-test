@@ -8,6 +8,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
   id         TEXT PRIMARY KEY,
   name       TEXT NOT NULL,
+  email      TEXT NOT NULL DEFAULT '',
   password   TEXT NOT NULL DEFAULT '',
   github     TEXT NOT NULL DEFAULT '',
   linkedin   TEXT NOT NULL DEFAULT '',
@@ -178,6 +179,7 @@ function migrate(db: DatabaseSync) {
       "ALTER TABLE recruiters ADD COLUMN password TEXT NOT NULL DEFAULT '';",
       "ALTER TABLE rounds ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE round_answers ADD COLUMN graded INTEGER NOT NULL DEFAULT 1;",
+      "ALTER TABLE students ADD COLUMN email TEXT NOT NULL DEFAULT '';"
     ]) {
       try {
         db.exec(statement);

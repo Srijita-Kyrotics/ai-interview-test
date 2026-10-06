@@ -197,12 +197,13 @@ check('round_answers has a graded column', columns('round_answers').includes('gr
 const suffix = Math.random().toString(36).slice(2, 8);
 const student = repo.insertStudent({
   name: `Unit Student ${suffix}`,
+  email: `unitstudent${suffix}@example.com`,
   passwordHash: hashPassword('studentpass'),
   skills: ['Python'],
   github: '',
   linkedin: '',
 });
-const studentSecret = repo.findStudentCredentialsByName(`unit student ${suffix}`);
+const studentSecret = repo.findStudentCredentialsByEmail(`unitstudent${suffix}@example.com`);
 check('a student secret is hashed at rest', studentSecret.password.startsWith('scrypt$'));
 check('the stored secret verifies', verifyPassword('studentpass', studentSecret.password));
 check('the public Student exposes no password', repo.findStudentById(student.id).password === undefined);

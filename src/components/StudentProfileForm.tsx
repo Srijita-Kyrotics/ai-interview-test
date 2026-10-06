@@ -11,6 +11,7 @@ type StudentProfileFormProps = {
   studentId?: string;
   initial?: {
     name: string;
+    email: string;
     /** Only needed for sign-up; the edit form has no password field. */
     password?: string;
     github: string;
@@ -20,7 +21,7 @@ type StudentProfileFormProps = {
   submitLabel: string;
 };
 
-const EMPTY = { name: '', password: '', github: '', linkedin: '', skills: [] as Skill[] };
+const EMPTY = { name: '', email: '', password: '', github: '', linkedin: '', skills: [] as Skill[] };
 
 export default function StudentProfileForm({
   studentId,
@@ -66,6 +67,18 @@ export default function StudentProfileForm({
             value={values.name}
             onChange={e => set('name', e.target.value)}
             placeholder="John Doe"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="email">Email address</label>
+          <input
+            id="email"
+            type="email"
+            required
+            maxLength={120}
+            value={values.email}
+            onChange={e => set('email', e.target.value)}
+            placeholder="student@example.com"
           />
         </div>
         {!studentId && (

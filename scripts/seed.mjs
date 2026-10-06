@@ -56,6 +56,7 @@ repo.insertJob({
 
 const student = repo.insertStudent({
   name: 'Srijita Ghorai',
+  email: 'srijita@example.com',
   passwordHash: hashPassword(studentPassword),
   github: 'https://github.com/srijita',
   linkedin: 'https://linkedin.com/in/srijita',
@@ -106,6 +107,6 @@ console.log(`  applicant  at Communication, ${match.score}% skill match`);
 console.log(`  questions  3 questions created by admin@superset.ai`);
 console.log('');
 console.log(`Sign in as recruiter: Priya Sharma / Acme Corp / ${recruiterPassword}`);
-console.log(`Sign in as student:   ${student.name} / ${studentPassword}`);
+console.log(`Sign in as student:   srijita@example.com / ${studentPassword}`);
 console.log('Sign in as admin: admin@superset.ai at /admin, using the password in');
 console.log('                   RECRUITFLOW_ADMIN_PASSWORD (admin access is off until set).');
