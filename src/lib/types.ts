@@ -127,9 +127,15 @@ export interface SkillMatch {
  * isolated so a real matcher can replace it without touching call sites.
  */
 export function calculateSkillMatch(requiredSkills: Skill[], studentSkills: Skill[]): SkillMatch {
-  const owned = new Set(studentSkills.map(s => s.trim().toLowerCase()));
-  const matched = requiredSkills.filter(skill => owned.has(skill.trim().toLowerCase()));
-  const missing = requiredSkills.filter(skill => !owned.has(skill.trim().toLowerCase()));
+  const owned = studentSkills.map(s => s.trim().toLowerCase());
+  const matched = requiredSkills.filter(skill => {
+    const req = skill.trim().toLowerCase();
+    return owned.some(s => s.includes(req) || req.includes(s));
+  });
+  const missing = requiredSkills.filter(skill => {
+    const req = skill.trim().toLowerCase();
+    return !owned.some(s => s.includes(req) || req.includes(s));
+  });
   const total = requiredSkills.length;
   return {
     score: total === 0 ? 100 : Math.round((matched.length / total) * 100),
