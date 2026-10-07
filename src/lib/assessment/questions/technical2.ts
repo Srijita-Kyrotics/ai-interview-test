@@ -1,4 +1,4 @@
-import type { RoundQuestion } from '../types';
+import type { RoundQuestion } from '../types.ts';
 
 export const technical2Questions: RoundQuestion[] = [
   {
@@ -24,8 +24,9 @@ export const technical2Questions: RoundQuestion[] = [
     kind: 'technical2',
     position: 2,
     prompt: 'Advanced Coding Problem',
-    hint: 'Provide a robust, edge-case-handled solution.',
+    hint: 'Provide a robust, edge-case-handled solution in the code editor.',
     minWords: 20,
     suggestedWords: 80,
+    isCoding: true,
   }
 ];

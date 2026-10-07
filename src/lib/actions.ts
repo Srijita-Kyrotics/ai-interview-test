@@ -67,13 +67,16 @@ export async function startAdminSession(email: string, password: string) {
     );
   }
 
-  const admin = repo.findAdminByEmail(email);
-  if (!admin || admin.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (email.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     throw new Error('Incorrect email or password.');
   }
   if (!verifyPassword(password, ADMIN_PASSWORD)) {
     throw new Error('Incorrect email or password.');
   }
+
+  // The admins row is created on first successful login, so the deployment only
+  // needs the environment variables — no pre-seeded account.
+  const admin = repo.findAdminByEmail(ADMIN_EMAIL) ?? repo.insertAdmin(ADMIN_EMAIL);
 
   (await cookies()).set(ADMIN_COOKIE, admin.id, cookieOptions);
   return admin;
@@ -206,6 +209,10 @@ export async function updateStudent(
   id: string,
   data: { name: string; email: string; skills: Skill[]; github: string; linkedin: string },
 ) {
+  const session = await getCurrentStudent();
+  if (!session || session.id !== id) {
+    throw new Error('You can only edit your own profile.');
+  }
   const student = repo.updateStudentRow(id, data);
   revalidatePath('/student/dashboard');
   revalidatePath('/student/profile');

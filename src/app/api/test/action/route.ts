@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server';
 
 import {
   applyForJob,
+  createJob,
   createStudent,
   signInRecruiter,
   signUpRecruiter,
   updateApplicationStage,
+  updateStudent,
 } from '@/lib/actions';
 import {
   completeAssessmentRound,
@@ -14,6 +16,7 @@ import {
   startAssessmentRound,
   submitRoundAnswer,
 } from '@/lib/round-actions';
+import { findGeneratedQuestion } from '@/lib/db/rounds.repo';
 
 /**
  * A JSON front door onto the real server actions, for the smoke test.
@@ -34,8 +37,10 @@ export const dynamic = 'force-dynamic';
 
 const handlers: Record<string, (...args: never[]) => unknown> = {
   createStudent: createStudent as never,
+  updateStudent: updateStudent as never,
   signInRecruiter: signInRecruiter as never,
   signUpRecruiter: signUpRecruiter as never,
+  createJob: createJob as never,
   applyForJob: applyForJob as never,
   updateApplicationStage: updateApplicationStage as never,
   startAssessmentRound: startAssessmentRound as never,
@@ -43,6 +48,9 @@ const handlers: Record<string, (...args: never[]) => unknown> = {
   submitRoundAnswer: submitRoundAnswer as never,
   completeAssessmentRound: completeAssessmentRound as never,
   getRoundStatesForRecruiter: getRoundStatesForRecruiter as never,
+  // The harness needs the generated prompt (including the answer key for
+  // closed questions) so it can answer like a candidate who knows the material.
+  getGeneratedQuestion: findGeneratedQuestion as never,
 };
 
 function enabled(): boolean {

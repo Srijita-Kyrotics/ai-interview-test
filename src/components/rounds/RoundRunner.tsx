@@ -15,6 +15,7 @@ import type {
   SerializableRoundDefinition,
 } from '@/lib/assessment/types';
 import { RoundStatusHeadline } from './RoundStatus';
+import { CodingIDE } from './CodingIDE';
 
 type Phase = 'instructions' | 'active' | 'finished';
 
@@ -107,6 +108,25 @@ export function RoundRunner({
   const question = definition.questions[index];
   const total = definition.questions.length;
 
+  const isTechRound = question?.kind === 'technical1' || question?.kind === 'technical2';
+  const isCodingDefault = Boolean(
+    question?.isCoding ||
+      (isTechRound &&
+        (question?.id.includes('algorithm') ||
+          question?.id.includes('debug') ||
+          question?.id.includes('coding') ||
+          question?.prompt.toLowerCase().includes('coding') ||
+          question?.prompt.toLowerCase().includes('algorithm') ||
+          question?.prompt.toLowerCase().includes('debug'))),
+  );
+  // Declared with the other hooks: returning early for the instructions or
+  // result phases must not change how many hooks a render calls.
+  const [editorMode, setEditorMode] = useState<'code' | 'text'>('text');
+
+  useEffect(() => {
+    setEditorMode(isCodingDefault ? 'code' : 'text');
+  }, [index, isCodingDefault]);
+
   // An answer is final once graded, so a question that already has one is shown
   // read-only rather than offered for another attempt.
   const submittedAnswer = useMemo(
@@ -116,7 +136,7 @@ export function RoundRunner({
   const isSubmitted = submittedAnswer !== null;
 
   useEffect(() => {
-    if (phase !== 'active' || !question || (question.kind !== 'communication' && question.kind !== 'aptitude' && question.kind !== 'technical1' && question.kind !== 'technical2') || !state.id) return;
+    if (phase !== 'active' || !question || (question.kind !== 'communication' && question.kind !== 'aptitude' && question.kind !== 'technical1' && question.kind !== 'technical2' && question.kind !== 'hr') || !state.id) return;
     let active = true;
     generateDynamicPrompt(state.id, question.id).then(res => {
       if (active) setDynamicPrompt(res);
@@ -214,8 +234,11 @@ export function RoundRunner({
   }, [isRecording, startRecorder, stopRecorder]);
   
   const speakPrompt = useCallback(() => {
-    const textToSpeak = dynamicPrompt || question?.prompt;
-    if (!textToSpeak) return;
+    const rawText = dynamicPrompt || question?.prompt;
+    if (!rawText) return;
+    // Replace consecutive underscores (like ________ or ___) with "Dash"
+    const textToSpeak = rawText.replace(/_+/g, ' Dash ');
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     window.speechSynthesis.speak(utterance);
   }, [dynamicPrompt, question]);
@@ -434,7 +457,6 @@ export function RoundRunner({
     );
   }
 
-  /* --------------------------------- active ------------------------------- */
   if (!question) return null;
 
   return (
@@ -475,7 +497,7 @@ export function RoundRunner({
 
       <section className="card round-card">
         <h2 className="round-question">
-          {(question.kind === 'communication' || question.kind === 'aptitude' || question.kind === 'technical1' || question.kind === 'technical2') ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
+          {(question.kind === 'communication' || question.kind === 'aptitude' || question.kind === 'technical1' || question.kind === 'technical2' || question.kind === 'hr') ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
         </h2>
         {question.hint && <p className="round-hint">{question.hint}</p>}
         
@@ -483,7 +505,7 @@ export function RoundRunner({
           <button type="button" className="btn-secondary" onClick={speakPrompt}>
             🔊 Speak Question
           </button>
-          {!isSubmitted && (
+          {!isSubmitted && editorMode === 'text' && (
             <button type="button" className={isRecording ? "btn-primary" : "btn-secondary"} onClick={toggleRecording}>
               {isRecording ? '⏹️ Stop Recording' : '🎤 Start Recording'}
             </button>
@@ -498,27 +520,63 @@ export function RoundRunner({
           </p>
         )}
 
-        <label className="round-label" htmlFor="round-answer">
-          Your answer (spoken or typed)
-        </label>
-        <textarea
-          id="round-answer"
-          className="round-textarea"
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-          rows={9}
-          readOnly={isSubmitted}
-          placeholder={isRecording ? "Listening..." : "Type your answer here or use the microphone..."}
-          disabled={secondsLeft === 0}
-        />
-        <div className="round-textarea-meta">
-          <span className={wordCount < question.minWords ? 'muted' : 'round-words-ok'}>
-            {wordCount} words
-          </span>
-          <span className="muted">
-            aim for {question.minWords}–{question.suggestedWords}
-          </span>
-        </div>
+        {isTechRound ? (
+          <div className="coding-ide-toggle-bar">
+            <label className="round-label">
+              {editorMode === 'code' ? '💻 Coding Workspace (C, C++, Java, Python)' : '📝 Written / Voice Answer'}
+            </label>
+            <div className="coding-mode-toggle">
+              <button
+                type="button"
+                className={`coding-mode-btn ${editorMode === 'code' ? 'is-active' : ''}`}
+                onClick={() => setEditorMode('code')}
+              >
+                💻 Code IDE
+              </button>
+              <button
+                type="button"
+                className={`coding-mode-btn ${editorMode === 'text' ? 'is-active' : ''}`}
+                onClick={() => setEditorMode('text')}
+              >
+                📝 Text Answer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <label className="round-label" htmlFor="round-answer">
+            Your answer (spoken or typed)
+          </label>
+        )}
+
+        {editorMode === 'code' ? (
+          <CodingIDE
+            value={draft}
+            onChange={setDraft}
+            disabled={secondsLeft === 0}
+            isSubmitted={isSubmitted}
+          />
+        ) : (
+          <>
+            <textarea
+              id="round-answer"
+              className="round-textarea"
+              value={draft}
+              onChange={event => setDraft(event.target.value)}
+              rows={9}
+              readOnly={isSubmitted}
+              placeholder={isRecording ? "Listening..." : "Type your answer here or use the microphone..."}
+              disabled={secondsLeft === 0}
+            />
+            <div className="round-textarea-meta">
+              <span className={wordCount < question.minWords ? 'muted' : 'round-words-ok'}>
+                {wordCount} words
+              </span>
+              <span className="muted">
+                aim for {question.minWords}–{question.suggestedWords}
+              </span>
+            </div>
+          </>
+        )}
 
         {error && <p className="form-error" role="alert">{error}</p>}
 

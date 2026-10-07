@@ -158,7 +158,7 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
     signals: [],
   };
 
-  if (round.kind === 'communication' || round.kind === 'aptitude' || round.kind === 'technical1' || round.kind === 'technical2') {
+  if (round.kind === 'communication' || round.kind === 'aptitude' || round.kind === 'technical1' || round.kind === 'technical2' || round.kind === 'hr') {
     const generated = roundsRepo.findGeneratedQuestion(round.id, questionId);
     if (!generated) throw new Error('Question not found. Did it fail to generate?');
 
@@ -210,7 +210,7 @@ Provide JSON with:
   roundsRepo.saveAnswer(round.id, question.id, question.position, text, evaluation, graded);
 
   refreshRouter();
-  return { evaluation, state: buildRoundState(application, round.kind) };
+  return { evaluation: { ...evaluation, graded }, state: buildRoundState(application, round.kind) };
 }
 
 function toEvaluation(record: AnswerRecord): AnswerEvaluation {
@@ -278,6 +278,14 @@ export async function generateDynamicPrompt(roundId: string, sectionId: string):
     instruction = "Generate a question about application scalability or performance optimization. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
   } else if (sectionId === 'tech2-advanced-coding') {
     instruction = "Generate an advanced software engineering problem. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'hr-cultural-fit') {
+    instruction = "Generate an HR interview question assessing cultural fit, personal background, and alignment with company culture. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'hr-teamwork-conflict') {
+    instruction = "Generate a behavioral HR interview question about conflict resolution, teamwork, or collaborating under differences. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'hr-adaptability-pressure') {
+    instruction = "Generate a situational HR interview question about adaptability, working under tight deadlines, or handling unexpected change. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
+  } else if (sectionId === 'hr-career-goals') {
+    instruction = "Generate an HR interview question about career aspirations, motivation, self-growth, and long-term professional goals. Provide JSON: {\"question\": \"...\", \"evaluation_criteria\": \"...\"}";
   } else {
     throw new Error(`Unknown question section: ${sectionId}`);
   }

@@ -1,6 +1,17 @@
-export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+export function getOpenRouterApiKey(): string {
+  return process.env.OPENROUTER_API_KEY?.trim() || '';
+}
 
-export async function generateOpenRouterCompletion(prompt: string, systemMessage?: string, jsonMode: boolean = false) {
+export async function generateOpenRouterCompletion(
+  prompt: string,
+  systemMessage?: string,
+  jsonMode: boolean = false,
+) {
+  const apiKey = getOpenRouterApiKey();
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY environment variable is not configured.');
+  }
+
   const messages = [];
   if (systemMessage) {
     messages.push({ role: 'system', content: systemMessage });
@@ -20,10 +31,10 @@ export async function generateOpenRouterCompletion(prompt: string, systemMessage
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'http://localhost:3000', // required by openrouter
-      'X-Title': 'RecruitFlow AI', // optional
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-Title': 'RecruitFlow AI',
     },
     body: JSON.stringify(body),
   });

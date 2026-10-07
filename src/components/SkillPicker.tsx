@@ -4,6 +4,24 @@ import { useEffect, useRef, useState } from 'react';
 import { rankSkillSuggestions, STANDARD_SKILLS } from '@/lib/types';
 import type { Skill } from '@/lib/types';
 
+const POPULAR_SKILLS: Skill[] = [
+  'Python',
+  'JavaScript',
+  'TypeScript',
+  'React',
+  'Next.js',
+  'Node.js',
+  'SQL',
+  'FastAPI',
+  'Java',
+  'C++',
+  'Docker',
+  'Git',
+  'Machine Learning',
+  'Data Structures',
+  'System Design',
+];
+
 type SkillPickerProps = {
   label: string;
   placeholder: string;
@@ -12,9 +30,8 @@ type SkillPickerProps = {
 };
 
 /**
- * Standardized-skill input. Free text is only ever a *search* query — every
- * committed skill comes from STANDARD_SKILLS, which is what keeps skill
- * matching exact-match reliable.
+ * Standardized-skill input with instant popular chips, autocomplete dropdown,
+ * and custom skill addition.
  */
 export default function SkillPicker({
   label,
@@ -26,10 +43,20 @@ export default function SkillPicker({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Derived synchronously so there's no network delay when typing fast.
-  const visibleSuggestions = query.trim()
-    ? rankSkillSuggestions(STANDARD_SKILLS, query).filter(s => !selected.includes(s))
-    : [];
+  const selectedLower = new Set(selected.map(s => s.toLowerCase()));
+
+  // Filtered standard suggestions
+  const visibleSuggestions = rankSkillSuggestions(STANDARD_SKILLS, query).filter(
+    s => !selectedLower.has(s.toLowerCase()),
+  );
+
+  const popularAvailable = POPULAR_SKILLS.filter(
+    s => !selectedLower.has(s.toLowerCase()),
+  );
+
+  const exactMatchExists = visibleSuggestions.some(
+    s => s.toLowerCase() === query.trim().toLowerCase(),
+  );
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -40,17 +67,43 @@ export default function SkillPicker({
   }, []);
 
   function addSkill(skill: Skill) {
-    if (!selected.includes(skill)) onChange([...selected, skill]);
+    const trimmed = skill.trim();
+    if (!trimmed) return;
+    if (!selectedLower.has(trimmed.toLowerCase())) {
+      onChange([...selected, trimmed]);
+    }
     setQuery('');
+    setOpen(false);
   }
 
   function removeSkill(skill: Skill) {
-    onChange(selected.filter(s => s !== skill));
+    onChange(selected.filter(s => s.toLowerCase() !== skill.toLowerCase()));
   }
 
   return (
-    <div className="form-group" ref={containerRef}>
+    <div className="form-group skill-field" ref={containerRef} style={{ position: 'relative' }}>
       <label htmlFor={`skill-search-${label}`}>{label}</label>
+      
+      {/* Selected Skills */}
+      {selected.length > 0 && (
+        <div className="chip-row" style={{ marginBottom: '0.625rem' }}>
+          {selected.map(skill => (
+            <span key={skill} className="badge badge-success">
+              {skill}
+              <button
+                type="button"
+                className="chip-remove"
+                aria-label={`Remove ${skill}`}
+                onClick={() => removeSkill(skill)}
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
       <input
         id={`skill-search-${label}`}
         value={query}
@@ -64,14 +117,28 @@ export default function SkillPicker({
         onKeyDown={e => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            if (visibleSuggestions[0]) addSkill(visibleSuggestions[0]);
+            if (visibleSuggestions[0]) {
+              addSkill(visibleSuggestions[0]);
+            } else if (query.trim()) {
+              addSkill(query.trim());
+            }
           }
           if (e.key === 'Escape') setOpen(false);
         }}
       />
 
-      {open && visibleSuggestions.length > 0 && (
+      {/* Dropdown Suggestions */}
+      {open && (visibleSuggestions.length > 0 || (query.trim() && !exactMatchExists)) && (
         <div className="suggestions-box" role="listbox">
+          {query.trim() && !exactMatchExists && (
+            <div
+              className="suggestion-item"
+              style={{ fontWeight: 600, color: 'var(--accent)' }}
+              onClick={() => addSkill(query.trim())}
+            >
+              + Add &quot;{query.trim()}&quot;
+            </div>
+          )}
           {visibleSuggestions.map(skill => (
             <div
               key={skill}
@@ -86,25 +153,30 @@ export default function SkillPicker({
         </div>
       )}
 
-      {selected.length > 0 && (
-        <div className="chip-row">
-          {selected.map(skill => (
-            <span key={skill} className="badge">
-              {skill}
+      {/* Quick Select Popular Skills */}
+      {popularAvailable.length > 0 && (
+        <div style={{ marginTop: '0.625rem' }}>
+          <span className="muted" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.375rem' }}>
+            ⚡ Popular skills (click to add):
+          </span>
+          <div className="chip-row">
+            {popularAvailable.slice(0, 10).map(skill => (
               <button
+                key={skill}
                 type="button"
-                className="chip-remove"
-                aria-label={`Remove ${skill}`}
-                onClick={() => removeSkill(skill)}
+                className="badge badge-dim"
+                style={{ cursor: 'pointer', border: '1px dashed var(--border-strong)', background: 'transparent' }}
+                onClick={() => addSkill(skill)}
               >
-                &times;
+                + {skill}
               </button>
-            </span>
-          ))}
+            ))}
+          </div>
         </div>
       )}
-      {selected.length === 0 && (
-        <p className="field-hint">Pick from the suggestions so your skills match job requirements.</p>
+
+      {selected.length === 0 && !popularAvailable.length && (
+        <p className="field-hint">Pick or search skills so your profile matches job requirements.</p>
       )}
     </div>
   );

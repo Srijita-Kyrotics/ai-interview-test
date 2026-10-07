@@ -80,11 +80,7 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
 
         <section>
           <h2>Skill match for this role</h2>
-          <SkillMatchSummary
-            job={job}
-            student={student}
-            matchedSkills={application.matchedSkills}
-          />
+          <SkillMatchSummary job={job} student={student} />
         </section>
 
         <section>

@@ -49,7 +49,7 @@ export default function RecruiterSignIn() {
               maxLength={80}
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Srijita Ghorai"
+              placeholder="Jane Smith"
             />
           </div>
           <div className="form-group">
@@ -60,7 +60,7 @@ export default function RecruiterSignIn() {
               maxLength={80}
               value={company}
               onChange={e => setCompany(e.target.value)}
-              placeholder="Acme Corp"
+              placeholder="Your company"
             />
           </div>
           <div className="form-group">

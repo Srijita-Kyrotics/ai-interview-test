@@ -1,4 +1,4 @@
-import type { RoundQuestion } from '../types';
+import type { RoundQuestion } from '../types.ts';
 
 export const aptitudeQuestions: RoundQuestion[] = [
   {

@@ -1,9 +1,10 @@
-import { communicationQuestions } from './questions/communication';
-import { aptitudeQuestions } from './questions/aptitude';
-import { technical1Questions } from './questions/technical1';
-import { technical2Questions } from './questions/technical2';
-import { evaluateCommunicationAnswer } from './evaluators/communication';
-import type { AnswerEvaluation, RoundDefinition, RoundKind, RoundQuestion } from './types';
+import { communicationQuestions } from './questions/communication.ts';
+import { aptitudeQuestions } from './questions/aptitude.ts';
+import { technical1Questions } from './questions/technical1.ts';
+import { technical2Questions } from './questions/technical2.ts';
+import { hrQuestions } from './questions/hr.ts';
+import { evaluateCommunicationAnswer } from './evaluators/communication.ts';
+import type { AnswerEvaluation, RoundDefinition, RoundKind, RoundQuestion } from './types.ts';
 
 /**
  * The single place a round is defined. Adding Aptitude, Technical 1, etc. means
@@ -112,7 +113,30 @@ const definitions: Record<RoundKind, RoundDefinition> = {
       throw new Error('The Technical 2 evaluator is driven by the AI path in submitRoundAnswer.');
     },
   },
-  hr: notBuilt('hr', 'HR Round', 'HR', 'Selected'),
+  hr: {
+    kind: 'hr',
+    title: 'HR Round',
+    shortTitle: 'HR',
+    stage: 'HR',
+    passesTo: 'Selected',
+    summary: 'Four behavioral and situational questions assessing cultural alignment, collaboration, adaptability, and motivation.',
+    instructions: [
+      'Answer all four questions thoroughly in your own words.',
+      'Describe real examples and experiences using clear situations, actions taken, and outcomes.',
+      'The evaluator scores your communication clarity, problem-solving mindset, and cultural fit.',
+      'Your answer is assessed as soon as you submit it, so you cannot revise it afterwards.',
+      'The round is timed. If the timer runs out the round closes with whatever you have submitted.'
+    ],
+    timeLimitSec: 25 * 60,
+    passThreshold: 60,
+    minAnswersToPass: 3,
+    proctoringFlagThreshold: 3,
+    maxScorePerAnswer: 10,
+    questions: hrQuestions,
+    evaluate: () => {
+      throw new Error('The HR evaluator is driven by the AI path in submitRoundAnswer.');
+    },
+  },
 };
 
 function notBuilt(

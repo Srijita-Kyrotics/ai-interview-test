@@ -4,8 +4,9 @@
  *   npm run test:unit
  *
  * No server and no API key needed: everything under test here is deliberately
- * free of database and model access so the rules can be checked directly.
+ * isolated in memory so the rules can be checked directly.
  */
+process.env.RECRUITFLOW_DB_PATH = ':memory:';
 import { getDb } from '../src/lib/db/index.ts';
 import * as repo from '../src/lib/db/repo.ts';
 import { parseAiJson, normalizeAiEvaluation } from '../src/lib/assessment/ai-response.ts';

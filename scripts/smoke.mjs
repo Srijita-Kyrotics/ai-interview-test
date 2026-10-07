@@ -1,20 +1,20 @@
 /**
  * End-to-end smoke test for the candidate -> assessment -> recruiter flow.
  *
- *   npm run db:seed
  *   RECRUITFLOW_TEST_HOOKS=1 npm run dev -- --port 3101
  *   npm run test:smoke -- http://localhost:3101
  *
- * Needs a seeded database and a server started with RECRUITFLOW_TEST_HOOKS=1,
- * which is what unlocks /api/test/action (see that route for why it exists).
- * Exits non-zero if any assertion fails.
+ * Needs a server started with RECRUITFLOW_TEST_HOOKS=1, which is what unlocks
+ * /api/test/action (see that route for why it exists). Everything it exercises
+ * — recruiter, job, student — is created by the run itself, so it works
+ * against an empty database. Exits non-zero if any assertion fails.
  *
  * Pages are fetched as HTML so the rendering assertions stay honest; the
  * server actions are driven through the test route. The live model is exercised
  * for real, so pass SKIP_AI=1 to check only the deterministic wiring.
  */
 const base = process.argv[2] ?? 'http://localhost:3000';
-const SEED_PASSWORD = process.env.RECRUITFLOW_SEED_RECRUITER_PASSWORD ?? 'seedpassword';
+const TEST_PASSWORD = process.env.RECRUITFLOW_TEST_PASSWORD ?? 'smoke-test-password';
 const withAi = process.env.SKIP_AI !== '1';
 
 let passed = 0;
@@ -88,6 +88,10 @@ async function actRejected(name, args, jar) {
 
 const first = (text, re) => text.match(re)?.[1] ?? null;
 
+// React SSR inserts <!-- --> between adjacent text nodes ("pass mark <!-- -->60"),
+// so strip the separators before matching literal UI copy.
+const text = html => html.replace(/<!--\s*-->/g, '');
+
 /* --------------------------------- the run -------------------------------- */
 
 console.log(`RecruitFlow smoke test against ${base}`);
@@ -100,11 +104,49 @@ if (!hooks?.ok) {
 
 const unique = Math.random().toString(36).slice(2, 8);
 const studentName = `Smoke Tester ${unique}`;
+const studentEmail = `smoke-${unique}@example.test`;
+const recruiterName = `Smoke Recruiter ${unique}`;
+const recruiterCompany = `Smoke Co ${unique}`;
+
+section('Recruiter and job setup');
+
+const recruiter = makeJar();
+const signedUp = await act('signUpRecruiter', [recruiterName, recruiterCompany, TEST_PASSWORD], recruiter);
+check('recruiter profile created', Boolean(signedUp?.id));
+
+const job = await act(
+  'createJob',
+  [
+    {
+      type: 'job',
+      title: `Smoke Role ${unique}`,
+      description: 'A role created by the smoke test run itself.',
+      eligibility: 'Open to all.',
+      skillsRequired: ['Python', 'SQL', 'Git'],
+      recruiterId: signedUp.id,
+    },
+  ],
+  recruiter,
+);
+check('job created by the recruiter', Boolean(job?.id));
 
 section('Session and application setup');
 
 const student = makeJar();
-await act('createStudent', [{ name: studentName, password: SEED_PASSWORD, skills: ['Python', 'SQL', 'Git'], github: '', linkedin: '' }], student);
+const createdStudent = await act(
+  'createStudent',
+  [
+    {
+      name: studentName,
+      email: studentEmail,
+      password: TEST_PASSWORD,
+      skills: ['Python', 'SQL', 'Git'],
+      github: '',
+      linkedin: '',
+    },
+  ],
+  student,
+);
 check('student session created', Boolean(student.get('rf_student')));
 
 const jobsHtml = await getPage('/student/jobs', student);
@@ -114,21 +156,26 @@ check('student sees open roles', Boolean(jobId));
 await act('applyForJob', [jobId], student);
 check('application created', Boolean(jobId));
 
+// The profile page and every match display read from student_skills, so the
+// skills passed at sign-up must actually land in the database.
+const initialMatch = text((await getPage(`/student/jobs/${jobId}`, student)).text);
+check('signup skills are persisted', initialMatch.includes('3/3 of your skills match'));
+
 const wrongPassword = await actRejected(
   'signInRecruiter',
-  ['Priya Sharma', 'Acme Corp', 'definitely-not-the-password'],
+  [recruiterName, recruiterCompany, 'definitely-not-the-password'],
   makeJar(),
 );
 check('recruiter sign-in rejects a wrong password', Boolean(wrongPassword), wrongPassword ?? 'accepted');
 
-const recruiter = makeJar();
-await act('signInRecruiter', ['Priya Sharma', 'Acme Corp', SEED_PASSWORD], recruiter);
-check('recruiter signed in to the seeded account', Boolean(recruiter.get('rf_recruiter')));
+const recruiterSignIn = makeJar();
+await act('signInRecruiter', [recruiterName, recruiterCompany, TEST_PASSWORD], recruiterSignIn);
+check('recruiter signed in to their own account', Boolean(recruiterSignIn.get('rf_recruiter')));
 
 const pipelineHtml = (await getPage(`/recruiter/jobs/${jobId}`, recruiter)).text;
 check('recruiter pipeline renders', pipelineHtml.includes('Smoke Tester') || pipelineHtml.length > 0);
 
-/** The pipeline also lists the seeded candidate, so match on this run's name. */
+/** Locates this run's application by the candidate name it created. */
 function applicationForStudent(html, name) {
   const nameAt = html.indexOf(name);
   if (nameAt === -1) return null;
@@ -166,13 +213,17 @@ check('round reports the whole time limit', started.state.secondsRemaining === 9
 
 const questionIds = ['grammar', 'tenses', 'fill-blank', 'listen-speak', 'essay'];
 
-const strongAnswers = [
-  'I am a final year computer science student who enjoys building backend services. I have built several FastAPI projects over the last two years, and I applied to this role because it combines Python with production traffic, which is exactly the kind of problem I want to spend the next year learning. First I want to understand how the team measures success in the first six months.',
-  'During my last project the search endpoint timed out on large result sets. First I reproduced the problem locally with a load test, then I profiled the queries and found a missing composite index plus an N plus one pattern in the ORM layer. I added the index and replaced the per row lookups with a single join. Finally I re-ran the load test to verify the fix, and the p95 latency dropped from four seconds to under two hundred milliseconds. I also added a regression test so the index could not silently disappear.',
-  'A database index is a little like the index at the back of a textbook. If somebody had to read the entire book to find a single definition every time they asked a question, that would be slow and tiring. The index instead records which page each topic lives on, so finding the answer becomes almost instant. The trade-off is that the index takes extra space to keep, and a small amount of extra time to build, which is the same bargain a book makes by spending a few pages on contents.',
-  'On a four person project last semester one teammate wanted to structure the API differently from the rest of us. Instead of arguing for an hour I asked them to write a short proposal and gave everyone fifteen minutes to react to it in writing. Their approach turned out to be much better for the frontend, so we adopted it. Afterwards I changed how I run disagreements: I ask for a written proposal first, because it moves the conversation from people to ideas.',
-  'From the posting I can see the team works on distributed systems and takes hiring seriously, and the mix of research and product work is what interests me most. One question I would ask is how the team decides what belongs in a research sprint versus a product sprint, and how often that boundary is revisited as the product matures.',
-];
+/**
+ * Prompts are generated live per run, so the harness reads what the model
+ * actually produced and answers like a prepared candidate: the answer key for
+ * closed questions, substantive prose for the open ones.
+ */
+const openAnswers = {
+  'listen-speak':
+    'On a four person project last semester one teammate wanted to structure the API differently from the rest of us. Instead of arguing for an hour I asked them to write a short proposal and gave everyone fifteen minutes to react to it in writing. Their approach turned out to be much better for the frontend, so we adopted it. Afterwards I changed how I run disagreements: I ask for a written proposal first, because it moves the conversation from people to ideas.',
+  essay:
+    'Social media has made connecting with people constant but shallower. The benefit is that distance no longer ends a friendship: I keep up with former classmates through daily messages and shared stories, and I have joined professional communities that turned into real collaborations. The drawback is that the interactions are often performative — a like replaces a conversation, and feeds reward loud opinions over careful ones. I have started scheduling a weekly video call with the people I actually care about, because sustained attention, not broadcast reach, is what builds a relationship. Used deliberately as a tool rather than a default, it extends relationships; used passively, it substitutes for them.',
+};
 
 // The UI generates a live prompt for each question before the candidate answers
 // it, and grading is driven by that generated question, so the harness follows
@@ -190,7 +241,12 @@ for (const [i, questionId] of questionIds.entries()) {
 }
 
 for (const [i, questionId] of questionIds.entries()) {
-  const graded = await act('submitRoundAnswer', [roundId, questionId, strongAnswers[i]], student);
+  const generated = await act('getGeneratedQuestion', [roundId, questionId], student);
+  const key = generated?.data?.correct_answer;
+  const answer = typeof key === 'string' && key.trim()
+    ? key
+    : openAnswers[questionId] ?? 'I would approach this carefully and explain my reasoning step by step.';
+  const graded = await act('submitRoundAnswer', [roundId, questionId, answer], student);
   check(`question ${i + 1} graded on submit`, Boolean(graded.evaluation));
   check(`question ${i + 1} carries feedback`, typeof graded.evaluation.feedback === 'string' && graded.evaluation.feedback.length > 0);
   check(
@@ -244,22 +300,22 @@ check('aptitude round is built', !aptitude.includes('has not been built'));
 
 section('Recruiter visibility');
 
-const candidateHtml = (await getPage(`/recruiter/candidates/${applicationId}`, recruiter)).text;
+const candidateHtml = text((await getPage(`/recruiter/candidates/${applicationId}`, recruiter)).text);
 check('recruiter sees the round card', candidateHtml.includes('Communication Round'));
 check('recruiter sees the pass status', candidateHtml.includes('Passed'));
 check('recruiter sees the pass mark', candidateHtml.includes('pass mark 60%'));
 check('recruiter sees the candidate answer text', candidateHtml.includes('four person project'));
 
 const states = await act('getRoundStatesForRecruiter', [applicationId, ['communication']], recruiter);
-const recruiterState = states[0];
+const recruiterState = states.communication;
 check('recruiter reads the round state', recruiterState.kind === 'communication');
 check('recruiter sees the answer text', recruiterState.answers.some(a => a.answer.includes('four person project')));
 
 section('Access control');
 
 const intruder = makeJar();
-await act('signUpRecruiter', ['Intruder Ltd', 'Not My Company', SEED_PASSWORD], intruder).catch(async () => {
-  await act('signInRecruiter', ['Intruder Ltd', 'Not My Company', SEED_PASSWORD], intruder);
+await act('signUpRecruiter', ['Intruder Ltd', 'Not My Company', TEST_PASSWORD], intruder).catch(async () => {
+  await act('signInRecruiter', ['Intruder Ltd', 'Not My Company', TEST_PASSWORD], intruder);
 });
 const stolen = await actRejected('getRoundStatesForRecruiter', [applicationId, ['communication']], intruder);
 check('another recruiter cannot read the candidate rounds', Boolean(stolen), stolen ?? 'accepted');
@@ -268,8 +324,44 @@ const anonymous = makeJar();
 const leaked = await actRejected('submitRoundAnswer', [roundId, 'grammar', 'let me in'], anonymous);
 check('an anonymous caller cannot submit an answer', Boolean(leaked), leaked ?? 'accepted');
 
-const unbuilt = (await getPage(`/student/rounds/technical1/${applicationId}`, student)).text;
-check('unbuilt rounds explain themselves', unbuilt.includes('has not been built'));
+// Every round in the registry is built now, so a future round must explain why
+// it cannot be started yet instead of rendering an empty shell.
+const unbuilt = text((await getPage(`/student/rounds/technical1/${applicationId}`, student)).text);
+check('future rounds explain themselves', unbuilt.includes('Not available yet'));
+check('future rounds name the stage they wait for', unbuilt.includes('Technical 1'));
+
+section('Profile edits recompute the skill match live');
+
+// Regression: the summary once mixed a live score with an apply-time chip
+// snapshot, so a profile saved after applying reported 0% while the chips
+// disagreed. Both the student job page and the recruiter summary must follow
+// the profile as it changes.
+const profileFields = { name: studentName, email: studentEmail, github: '', linkedin: '' };
+
+const editUnauthorized = await actRejected(
+  'updateStudent',
+  [createdStudent.id, { ...profileFields, skills: ['Python'] }],
+  makeJar(),
+);
+check('an anonymous caller cannot edit someone\'s profile', Boolean(editUnauthorized), editUnauthorized ?? 'accepted');
+
+await act('updateStudent', [createdStudent.id, { ...profileFields, skills: [] }], student);
+
+const clearedJobPage = text((await getPage(`/student/jobs/${jobId}`, student)).text);
+check('student sees the match drop when skills are removed', clearedJobPage.includes('0/3 of your skills match'));
+
+const clearedCandidate = text((await getPage(`/recruiter/candidates/${applicationId}`, recruiter)).text);
+check('recruiter summary recomputes after the profile is cleared', clearedCandidate.includes('0/3 required skills matched'));
+check('every required skill shows as missing', clearedCandidate.includes('✗ Python'));
+
+await act('updateStudent', [createdStudent.id, { ...profileFields, skills: ['Python', 'SQL', 'Git'] }], student);
+
+const restoredJobPage = text((await getPage(`/student/jobs/${jobId}`, student)).text);
+check('student sees the match restored after re-saving', restoredJobPage.includes('3/3 of your skills match'));
+
+const restoredCandidate = text((await getPage(`/recruiter/candidates/${applicationId}`, recruiter)).text);
+check('recruiter summary reflects the saved profile', restoredCandidate.includes('3/3 required skills matched'));
+check('skills show as present again', restoredCandidate.includes('✓ Python'));
 
 /* --------------------------------- summary -------------------------------- */
 

@@ -1,4 +1,4 @@
-import type { AnswerEvaluation, EvaluationSignal, RoundQuestion } from '../types';
+import type { AnswerEvaluation, EvaluationSignal, RoundQuestion } from '../types.ts';
 
 /**
  * Deterministic, explainable scoring for spoken/written communication.

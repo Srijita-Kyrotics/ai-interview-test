@@ -179,11 +179,7 @@ function CandidateCard({
       <div className="candidate-body">
         <div>
           <h4 className="sub-label">Skill match</h4>
-          <SkillMatchSummary
-            job={job}
-            student={student}
-            matchedSkills={application.matchedSkills}
-          />
+          <SkillMatchSummary job={job} student={student} />
         </div>
         <div>
           <h4 className="sub-label">Student skills</h4>
