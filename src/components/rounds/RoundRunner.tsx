@@ -105,6 +105,79 @@ export function RoundRunner({
   const [, startTransition] = useTransition();
   const closingRef = useRef(false);
 
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [proctoringGranted, setProctoringGranted] = useState(false);
+  const webcamRecorderRef = useRef<MediaRecorder | null>(null);
+  const screenRecorderRef = useRef<MediaRecorder | null>(null);
+  const webcamChunksRef = useRef<Blob[]>([]);
+  const screenChunksRef = useRef<Blob[]>([]);
+  const webcamVideoRef = useRef<HTMLVideoElement>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (webcamVideoRef.current && webcamStream) {
+      webcamVideoRef.current.srcObject = webcamStream;
+    }
+  }, [webcamStream, phase]);
+
+  useEffect(() => {
+    if (screenVideoRef.current && screenStream) {
+      screenVideoRef.current.srcObject = screenStream;
+    }
+  }, [screenStream, phase]);
+
+  const requestProctoring = async () => {
+    try {
+      setError(null);
+      const webcam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      setWebcamStream(webcam);
+      setScreenStream(screen);
+      setProctoringGranted(true);
+    } catch (err) {
+      setError('Camera and screen sharing permissions are required for proctoring.');
+    }
+  };
+
+  const stopAndUploadProctoring = async (roundId: string) => {
+    return new Promise<void>((resolve) => {
+      let pending = 0;
+      const checkDone = () => { if (pending === 0) resolve(); };
+      
+      const stopRecorder = (recorder: MediaRecorder | null, chunks: Blob[], type: 'webcam' | 'screen') => {
+        if (recorder && recorder.state !== 'inactive') {
+          pending++;
+          recorder.onstop = async () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            if (blob.size > 0) {
+              const fd = new FormData();
+              fd.append('file', blob, `${type}.webm`);
+              fd.append('roundId', roundId);
+              fd.append('type', type);
+              await fetch('/api/rounds/proctoring', { method: 'POST', body: fd }).catch(console.error);
+            }
+            // Stop tracks
+            const stream = type === 'webcam' ? webcamStream : screenStream;
+            stream?.getTracks().forEach(track => track.stop());
+            
+            pending--;
+            checkDone();
+          };
+          recorder.stop();
+        }
+      };
+      
+      if ((webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') || 
+          (screenRecorderRef.current && screenRecorderRef.current.state !== 'inactive')) {
+        stopRecorder(webcamRecorderRef.current, webcamChunksRef.current, 'webcam');
+        stopRecorder(screenRecorderRef.current, screenChunksRef.current, 'screen');
+      } else {
+        resolve();
+      }
+    });
+  };
+
   const question = definition.questions[index];
   const total = definition.questions.length;
 
@@ -276,7 +349,6 @@ export function RoundRunner({
     };
   }, [timerRunning, state.id]);
 
-  // Close the round automatically if the clock runs out mid-answer.
   useEffect(() => {
     if (phase !== 'active' || secondsLeft !== 0 || closingRef.current) return;
     const roundId = state.id;
@@ -284,6 +356,7 @@ export function RoundRunner({
     closingRef.current = true;
     startTransition(async () => {
       try {
+        await stopAndUploadProctoring(roundId);
         const result = await completeAssessmentRound(roundId);
         setState(result.state);
         setAdvancedTo(result.advancedTo);
@@ -297,6 +370,10 @@ export function RoundRunner({
   }, [secondsLeft, phase, state.id]);
 
   const begin = useCallback(() => {
+    if (!proctoringGranted) {
+      setError('You must enable proctoring before starting the round.');
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
@@ -307,11 +384,27 @@ export function RoundRunner({
         setDraft('');
         setDynamicPrompt(null);
         setPhase('active');
+        
+        // Start recording
+        if (webcamStream) {
+          webcamChunksRef.current = [];
+          const webcamRecorder = new MediaRecorder(webcamStream, { mimeType: 'video/webm' });
+          webcamRecorder.ondataavailable = e => { if (e.data.size > 0) webcamChunksRef.current.push(e.data); };
+          webcamRecorder.start();
+          webcamRecorderRef.current = webcamRecorder;
+        }
+        if (screenStream) {
+          screenChunksRef.current = [];
+          const screenRecorder = new MediaRecorder(screenStream, { mimeType: 'video/webm' });
+          screenRecorder.ondataavailable = e => { if (e.data.size > 0) screenChunksRef.current.push(e.data); };
+          screenRecorder.start();
+          screenRecorderRef.current = screenRecorder;
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not start the round.');
       }
     });
-  }, [applicationId, definition.kind]);
+  }, [applicationId, definition.kind, proctoringGranted, webcamStream, screenStream]);
 
   const submit = useCallback(() => {
     const roundId = state.id;
@@ -343,6 +436,7 @@ export function RoundRunner({
     setError(null);
     startTransition(async () => {
       try {
+        await stopAndUploadProctoring(roundId);
         const result = await completeAssessmentRound(roundId);
         setState(result.state);
         setAdvancedTo(result.advancedTo);
@@ -392,10 +486,29 @@ export function RoundRunner({
             round moves you to <strong>{definition.passesTo}</strong>.
           </p>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="btn-primary btn-lg" onClick={begin}>
-            Start round
-          </button>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {!proctoringGranted && (
+              <button className="btn-secondary btn-lg" onClick={requestProctoring} type="button">
+                Enable Proctoring
+              </button>
+            )}
+            <button className="btn-primary btn-lg" onClick={begin} disabled={!proctoringGranted}>
+              Start round
+            </button>
+          </div>
         </section>
+        {proctoringGranted && (
+          <div className="proctoring-pip" style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
+              <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Screen</span>
+              <video ref={screenVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -624,6 +737,18 @@ export function RoundRunner({
           </p>
         )}
       </section>
+      {proctoringGranted && phase === 'active' && (
+        <div className="proctoring-pip" style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
+            <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Screen</span>
+            <video ref={screenVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
