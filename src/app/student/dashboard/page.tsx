@@ -4,6 +4,7 @@ import PipelineTracker from '@/components/PipelineTracker';
 import { RoundStatusBadge } from '@/components/rounds/RoundStatus';
 import { StartOverButton } from '@/components/SessionButtons';
 import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
+import { getRoundDefinition } from '@/lib/assessment/registry';
 import { isRoundActionable } from '@/lib/assessment/status';
 import { getCurrentStudent, getStudentApplications } from '@/lib/actions';
 import { OPPORTUNITY_TYPE_LABELS, calculateSkillMatch, matchLabel } from '@/lib/types';
@@ -118,8 +119,8 @@ export default async function StudentDashboardPage() {
                           href={`/student/rounds/${open.kind}/${application.id}`}
                         >
                           {open.status === 'in_progress'
-                            ? `Resume ${open.kind} round`
-                            : `Start ${open.kind} round`}
+                            ? `Resume ${getRoundDefinition(open.kind).shortTitle} round`
+                            : `Start ${getRoundDefinition(open.kind).shortTitle} round`}
                         </Link>
                       ) : (
                         done.length > 0 && (

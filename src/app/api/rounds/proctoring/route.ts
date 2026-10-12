@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
-import { getCurrentStudent } from '@/lib/actions';
+import { getCurrentAdmin, getCurrentRecruiter, getCurrentStudent } from '@/lib/actions';
 import * as repo from '@/lib/db/repo';
 import * as roundsRepo from '@/lib/db/rounds.repo';
 
@@ -14,6 +14,55 @@ function proctoringRoot(): string {
       : configured;
   const dir = base ? join(base, '..') : join(process.cwd(), '.data');
   return normalize(join(dir, 'proctoring'));
+}
+
+async function mayRead(studentId: string, jobId: string): Promise<boolean> {
+  const student = await getCurrentStudent();
+  if (student?.id === studentId) return true;
+
+  if (await getCurrentAdmin()) return true;
+
+  const recruiter = await getCurrentRecruiter();
+  if (!recruiter) return false;
+  const job = repo.findJobById(jobId);
+  return job?.recruiterId === recruiter.id;
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const roundId = url.searchParams.get('roundId');
+  const type = url.searchParams.get('type');
+  if (!roundId || (type !== 'webcam' && type !== 'screen')) {
+    return new Response('Not found.', { status: 404 });
+  }
+
+  const round = roundsRepo.findRoundById(roundId);
+  if (!round) return new Response('Not found.', { status: 404 });
+
+  const application = repo.findApplicationById(round.application_id);
+  if (!application) return new Response('Not found.', { status: 404 });
+
+  if (!(await mayRead(application.studentId, application.jobId))) {
+    return new Response('Not found.', { status: 403 });
+  }
+
+  const filePath = join(proctoringRoot(), roundId, `${type}.webm`);
+  if (!existsSync(filePath)) {
+    return new Response('Recording not found.', { status: 404 });
+  }
+
+  try {
+    const data = readFileSync(filePath);
+    return new Response(new Uint8Array(data), {
+      headers: {
+        'Content-Type': 'video/webm',
+        'Content-Length': String(data.byteLength),
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  } catch {
+    return new Response('Error reading recording.', { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

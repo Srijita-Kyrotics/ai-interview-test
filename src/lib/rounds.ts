@@ -1,9 +1,21 @@
+import { existsSync } from 'node:fs';
+import { isAbsolute, join, normalize } from 'node:path';
 import { getRoundDefinition } from '@/lib/assessment/registry';
 import type { RoundKind, RoundState, RoundStatus } from '@/lib/assessment/types';
 import * as roundsRepo from '@/lib/db/rounds.repo';
 import type { RoundRow } from '@/lib/db/rounds.repo';
 import * as repo from '@/lib/db/repo';
 import type { Application } from '@/lib/types';
+
+function proctoringRoot(): string {
+  const configured = process.env.RECRUITFLOW_DB_PATH;
+  const base =
+    configured && configured !== ':memory:' && !isAbsolute(configured)
+      ? join(process.cwd(), configured)
+      : configured;
+  const dir = base ? join(base, '..') : join(process.cwd(), '.data');
+  return normalize(join(dir, 'proctoring'));
+}
 
 /**
  * A job may set its own bar per round. Falling back to the registry default
@@ -69,6 +81,14 @@ export function buildRoundState(
     answersUngraded > 0 ||
     proctoringEvents.length > definition.proctoringFlagThreshold;
 
+  const proctoringDir = row ? join(proctoringRoot(), row.id) : null;
+  const hasWebcam = proctoringDir ? existsSync(join(proctoringDir, 'webcam.webm')) : false;
+  const hasScreen = proctoringDir ? existsSync(join(proctoringDir, 'screen.webm')) : false;
+  const proctoringVideos = {
+    webcamUrl: hasWebcam && row ? `/api/rounds/proctoring?roundId=${row.id}&type=webcam` : null,
+    screenUrl: hasScreen && row ? `/api/rounds/proctoring?roundId=${row.id}&type=screen` : null,
+  };
+
   return {
     id: row?.id ?? null,
     applicationId: application.id,
@@ -88,6 +108,7 @@ export function buildRoundState(
     answersUngraded,
     secondsRemaining,
     proctoringEvents,
+    proctoringVideos,
   };
 }
 

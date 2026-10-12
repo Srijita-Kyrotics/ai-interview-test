@@ -112,6 +112,40 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
         </div>
       )}
 
+      {state.proctoringVideos && (state.proctoringVideos.webcamUrl || state.proctoringVideos.screenUrl) && (
+        <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--surface, #f8fafc)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 600 }}>📹 Proctoring Session Recordings</h4>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            {state.proctoringVideos.webcamUrl && (
+              <div style={{ flex: '1 1 240px', minWidth: '220px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-muted)' }}>
+                  Webcam Stream
+                </span>
+                <video
+                  controls
+                  preload="metadata"
+                  src={state.proctoringVideos.webcamUrl}
+                  style={{ width: '100%', borderRadius: '6px', background: '#111', maxHeight: '180px' }}
+                />
+              </div>
+            )}
+            {state.proctoringVideos.screenUrl && (
+              <div style={{ flex: '1 1 240px', minWidth: '220px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem', color: 'var(--text-muted)' }}>
+                  Screen Share Stream
+                </span>
+                <video
+                  controls
+                  preload="metadata"
+                  src={state.proctoringVideos.screenUrl}
+                  style={{ width: '100%', borderRadius: '6px', background: '#111', maxHeight: '180px' }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {!scored && state.status === 'in_progress' && (
         <p className="muted small">
           {state.answers.length} of {definition.questions.length} answers submitted so far.

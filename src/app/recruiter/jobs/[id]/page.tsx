@@ -4,6 +4,7 @@ import PipelineTracker from '@/components/PipelineTracker';
 import SkillMatchSummary from '@/components/SkillMatchSummary';
 import StageControls from '@/components/StageControls';
 import { RoundStatusBadge } from '@/components/rounds/RoundStatus';
+import { getRoundDefinition } from '@/lib/assessment/registry';
 import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
 import { getCurrentRecruiter, getJob, getJobApplications } from '@/lib/actions';
 import { getRoundStatesForRecruiter } from '@/lib/round-actions';
@@ -34,13 +35,19 @@ export default async function JobPipelinePage({ params }: JobPipelinePageProps) 
 
   const applications = await getJobApplications(job.id);
 
-  // One batched pass so each card can show its round status without N+1 calls.
+  // Batched pass to show the relevant round status for each candidate's stage
   const roundByApplication = new Map<string, RoundState>();
   await Promise.all(
     applications.map(async application => {
       const states = await getRoundStatesForRecruiter(application.id, ACTIVE_ROUND_KINDS);
-      const communication = states.communication;
-      if (communication) roundByApplication.set(application.id, communication);
+      // Pick round for current stage, or latest round that was started / completed
+      const stageRound = Object.values(states).find(s => {
+        const def = getRoundDefinition(s.kind);
+        return def.stage === application.stage;
+      });
+      const nonLocked = Object.values(states).filter(s => s.status !== 'locked');
+      const chosen = stageRound ?? nonLocked[nonLocked.length - 1] ?? states.communication;
+      if (chosen) roundByApplication.set(application.id, chosen);
     }),
   );
 
@@ -172,7 +179,14 @@ function CandidateCard({
           <span className={`stage-pill stage-${slug(application.stage)}`}>
             {application.stage}
           </span>
-          {round && round.status !== 'locked' && <RoundStatusBadge state={round} showScore />}
+          {round && round.status !== 'locked' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span className="muted small" style={{ fontWeight: 600 }}>
+                {getRoundDefinition(round.kind).shortTitle}:
+              </span>
+              <RoundStatusBadge state={round} showScore />
+            </span>
+          )}
         </div>
       </div>
 

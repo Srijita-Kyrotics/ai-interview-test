@@ -37,8 +37,7 @@ export default async function RoundPage({
         <div className="card empty-state">
           <h1>{definition.title}</h1>
           <p className="lead-muted">
-            This round has not been built yet. Only the Communication round is available at the
-            moment.
+            This round has not been built yet. Please check back later or contact your recruiter.
           </p>
           <Link href="/student/dashboard" className="btn-ghost btn-sm">
             Back to dashboard

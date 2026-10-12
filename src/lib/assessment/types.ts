@@ -158,4 +158,8 @@ export interface RoundState {
   /** Seconds left on the whole-round timer, or `null` if not started/finished. */
   secondsRemaining: number | null;
   proctoringEvents: { eventType: string; timestamp: string }[];
+  proctoringVideos?: {
+    webcamUrl: string | null;
+    screenUrl: string | null;
+  };
 }

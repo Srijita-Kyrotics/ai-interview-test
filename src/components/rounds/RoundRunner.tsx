@@ -486,10 +486,15 @@ export function RoundRunner({
             round moves you to <strong>{definition.passesTo}</strong>.
           </p>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {!proctoringGranted && (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {proctoringGranted ? (
+              <span className="badge badge-success" style={{ padding: '0.65rem 1.1rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px', border: '1px solid #86efac', background: '#f0fdf4', color: '#166534' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'inline-block' }} />
+                ✓ Proctoring Active: Camera & Screen Verified
+              </span>
+            ) : (
               <button className="btn-secondary btn-lg" onClick={requestProctoring} type="button">
-                Enable Proctoring
+                🎥 Enable Camera & Screen Proctoring
               </button>
             )}
             <button className="btn-primary btn-lg" onClick={begin} disabled={!proctoringGranted}>
@@ -610,7 +615,14 @@ export function RoundRunner({
 
       <section className="card round-card">
         <h2 className="round-question">
-          {(question.kind === 'communication' || question.kind === 'aptitude' || question.kind === 'technical1' || question.kind === 'technical2' || question.kind === 'hr') ? (dynamicPrompt || 'Loading prompt...') : question.prompt}
+          {(question.kind === 'communication' || question.kind === 'aptitude' || question.kind === 'technical1' || question.kind === 'technical2' || question.kind === 'hr')
+            ? (dynamicPrompt || (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-muted)' }}>
+                  <span style={{ display: 'inline-block', width: '0.9rem', height: '0.9rem', borderRadius: '50%', border: '2px solid var(--accent)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+                  AI Interviewer is generating your question...
+                </span>
+              ))
+            : question.prompt}
         </h2>
         {question.hint && <p className="round-hint">{question.hint}</p>}
         

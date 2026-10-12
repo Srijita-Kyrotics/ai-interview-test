@@ -23,7 +23,7 @@ export default async function Home() {
       <header style={{ position: 'relative', zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 3rem', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, var(--accent), #8b5cf6)', display: 'grid', placeItems: 'center', color: 'white', fontWeight: 'bold', fontSize: '1.1rem' }}>
-            S
+            R
           </div>
           <span style={{ fontWeight: '700', fontSize: '1.25rem', letterSpacing: '-0.03em', color: 'var(--text)' }}>RecruitFlow</span>
         </div>
