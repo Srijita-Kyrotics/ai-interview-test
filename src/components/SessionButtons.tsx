@@ -46,3 +46,26 @@ export function StartOverButton() {
     </button>
   );
 }
+
+/** Ends the student session and returns to the public home page. */
+export function SignOutStudentButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <button
+      type="button"
+      className="btn-ghost btn-sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          await endStudentSession();
+          router.push('/');
+          router.refresh();
+        })
+      }
+    >
+      Sign out
+    </button>
+  );
+}

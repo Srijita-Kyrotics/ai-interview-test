@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import StudentProfileForm from '@/components/StudentProfileForm';
-import { StartOverButton } from '@/components/SessionButtons';
+import { StartOverButton, SignOutStudentButton } from '@/components/SessionButtons';
 import { getCurrentStudent } from '@/lib/actions';
 
 export const metadata = { title: 'My profile' };
@@ -18,7 +18,10 @@ export default async function StudentProfilePage() {
             <h1>My profile</h1>
             <p className="lead-muted">Update the details recruiters see when you apply.</p>
           </div>
-          <StartOverButton />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <StartOverButton />
+            <SignOutStudentButton />
+          </div>
         </div>
 
         <StudentProfileForm

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import PipelineTracker from '@/components/PipelineTracker';
 import { RoundStatusBadge } from '@/components/rounds/RoundStatus';
-import { StartOverButton } from '@/components/SessionButtons';
+import { StartOverButton, SignOutStudentButton } from '@/components/SessionButtons';
 import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
 import { getRoundDefinition } from '@/lib/assessment/registry';
 import { isRoundActionable } from '@/lib/assessment/status';
@@ -41,6 +41,7 @@ export default async function StudentDashboardPage() {
           <Link href="/student/jobs">Browse opportunities</Link>
           <Link href="/student/profile">Edit profile</Link>
           <StartOverButton />
+          <SignOutStudentButton />
         </div>
       </div>
 

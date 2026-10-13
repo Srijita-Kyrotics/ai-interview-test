@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { signInStudent } from '@/lib/actions';
+import { DEMO_PASSWORD, DEMO_STUDENT } from '@/lib/demo-credentials';
 import StudentProfileForm from './StudentProfileForm';
 
 export default function StudentAuth() {
-  const router = useRouter();
   const [isSignIn, setIsSignIn] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +18,7 @@ export default function StudentAuth() {
     startTransition(async () => {
       try {
         await signInStudent(email, password);
-        router.push('/student/dashboard');
+        window.location.href = '/student/dashboard';
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not sign in.');
       }
@@ -91,7 +90,34 @@ export default function StudentAuth() {
             className="btn-ghost" 
             onClick={() => { setIsSignIn(false); setError(null); }}
           >
-            Don't have an account? Create profile
+            Don&apos;t have an account? Create profile
+          </button>
+        </div>
+        <div
+          style={{
+            marginTop: '1.25rem',
+            padding: '0.85rem 1rem',
+            border: '1px dashed var(--border-strong, var(--border))',
+            borderRadius: '12px',
+            background: 'var(--surface-hover)',
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <strong style={{ color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>
+            Demo account
+          </strong>
+          <span>Email: {DEMO_STUDENT.email}</span>
+          <br />
+          <span>Password: {DEMO_PASSWORD}</span>
+          <br />
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            style={{ marginTop: '0.6rem' }}
+            onClick={() => { setEmail(DEMO_STUDENT.email); setPassword(DEMO_PASSWORD); setError(null); }}
+          >
+            Fill demo credentials
           </button>
         </div>
       </form>

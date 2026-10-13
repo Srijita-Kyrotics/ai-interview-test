@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInRecruiter, signUpRecruiter } from '@/lib/actions';
+import { DEMO_PASSWORD, DEMO_RECRUITER } from '@/lib/demo-credentials';
 
 export default function RecruiterSignIn() {
   const router = useRouter();
@@ -93,6 +94,42 @@ export default function RecruiterSignIn() {
               {isSignIn ? "Don't have an account? Create profile" : "Already have an account? Sign in"}
             </button>
           </div>
+          {isSignIn && (
+            <div
+              style={{
+                marginTop: '1.25rem',
+                padding: '0.85rem 1rem',
+                border: '1px dashed var(--border-strong, var(--border))',
+                borderRadius: '12px',
+                background: 'var(--surface-hover)',
+                fontSize: '0.8rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <strong style={{ color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>
+                Demo account
+              </strong>
+              <span>Name: {DEMO_RECRUITER.name}</span>
+              <br />
+              <span>Company: {DEMO_RECRUITER.company}</span>
+              <br />
+              <span>Password: {DEMO_PASSWORD}</span>
+              <br />
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                style={{ marginTop: '0.6rem' }}
+                onClick={() => {
+                  setName(DEMO_RECRUITER.name);
+                  setCompany(DEMO_RECRUITER.company);
+                  setPassword(DEMO_PASSWORD);
+                  setError(null);
+                }}
+              >
+                Fill demo credentials
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

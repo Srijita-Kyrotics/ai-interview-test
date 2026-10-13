@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getCurrentStudent, getCurrentRecruiter } from '@/lib/actions';
+import { DEMO_PASSWORD, DEMO_RECRUITER, DEMO_STUDENT } from '@/lib/demo-credentials';
 import { redirect } from 'next/navigation';
 
 export default async function Home() {
@@ -65,7 +66,11 @@ export default async function Home() {
             </p>
             {/* Fixed demo profile details */}
             <div style={{ background: 'var(--surface-hover)', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: Alex Johnson</span>
+              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: {DEMO_STUDENT.name}</span>
+              <span>{DEMO_STUDENT.email}</span>
+              <br />
+              <span>Password: {DEMO_PASSWORD}</span>
+              <br />
               <span>Skills: React, TypeScript, Node.js, Python + more</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -89,8 +94,10 @@ export default async function Home() {
             </p>
             {/* Fixed demo profile details */}
             <div style={{ background: 'var(--surface-hover)', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: Sarah Mitchell</span>
-              <span>Company: TechVentures Inc.</span>
+              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: {DEMO_RECRUITER.name}</span>
+              <span>Company: {DEMO_RECRUITER.company}</span>
+              <br />
+              <span>Password: {DEMO_PASSWORD}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <Link href="/api/demo/recruiter" className="btn-primary" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', borderRadius: '12px', textAlign: 'center', display: 'block', background: 'linear-gradient(135deg, #111827, #374151)' }}>
