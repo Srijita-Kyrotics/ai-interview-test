@@ -48,7 +48,6 @@ export default function StudentProfileForm({
           await createStudent({ ...values, password: values.password ?? '' });
         }
         router.push('/student/dashboard');
-        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
       }

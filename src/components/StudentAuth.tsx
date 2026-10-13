@@ -20,7 +20,6 @@ export default function StudentAuth() {
       try {
         await signInStudent(email, password);
         router.push('/student/dashboard');
-        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not sign in.');
       }

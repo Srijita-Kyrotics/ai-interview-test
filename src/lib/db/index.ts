@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -139,12 +140,41 @@ CREATE INDEX IF NOT EXISTS idx_rounds_app ON rounds(application_id);
 CREATE INDEX IF NOT EXISTS idx_answers_round ON round_answers(round_id);
 `;
 
+function getDatabaseFilePath(): string {
+  if (process.env.RECRUITFLOW_DB_PATH) {
+    return process.env.RECRUITFLOW_DB_PATH;
+  }
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return join(tmpdir(), 'recruitflow.db');
+  }
+  return join(process.cwd(), '.data', 'recruitflow.db');
+}
+
 function open(): DatabaseSync {
-  const file = process.env.RECRUITFLOW_DB_PATH ?? join(process.cwd(), '.data', 'recruitflow.db');
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  let file = getDatabaseFilePath();
+  if (file !== ':memory:') {
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+    } catch {
+      file = join(tmpdir(), 'recruitflow.db');
+      try {
+        mkdirSync(dirname(file), { recursive: true });
+      } catch {
+        file = ':memory:';
+      }
+    }
+  }
 
   const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL');
+  try {
+    db.exec('PRAGMA journal_mode = WAL');
+  } catch {
+    try {
+      db.exec('PRAGMA journal_mode = DELETE');
+    } catch {
+      // PRAGMA journal_mode fallback
+    }
+  }
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   migrate(db);

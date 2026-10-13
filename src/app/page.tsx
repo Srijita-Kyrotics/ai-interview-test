@@ -47,6 +47,12 @@ export default async function Home() {
           A fully integrated campus hiring platform. Live proctored interviews, AI voice agents, and seamless pipeline management in one unified workspace.
         </p>
 
+        {/* Demo notice */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(12px)', border: '1px solid var(--border)', borderRadius: '999px', padding: '0.5rem 1.2rem', marginBottom: '2rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '1rem' }}>⚡</span>
+          <span><strong style={{ color: 'var(--text)' }}>No sign-up needed</strong> — click <em>Try Demo</em> on either card to explore instantly.</span>
+        </div>
+
         <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '900px', width: '100%' }}>
           {/* Student Portal Card */}
           <div style={{ flex: '1 1 350px', background: 'rgba(255, 255, 255, 0.6)', backdropFilter: 'blur(16px)', border: '1px solid var(--border)', borderRadius: '24px', padding: '3rem 2rem', textAlign: 'left', transition: 'transform 0.2s, box-shadow 0.2s', boxShadow: 'var(--shadow-sm)' }} className="portal-card">
@@ -57,9 +63,19 @@ export default async function Home() {
             <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem' }}>
               Create your profile, match with top jobs, and take live, AI-proctored interviews in a seamless environment.
             </p>
-            <Link href="/student" className="btn-primary" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', borderRadius: '12px' }}>
-              Student Login
-            </Link>
+            {/* Fixed demo profile details */}
+            <div style={{ background: 'var(--surface-hover)', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: Alex Johnson</span>
+              <span>Skills: React, TypeScript, Node.js, Python + more</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <Link href="/api/demo/student" className="btn-primary" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', borderRadius: '12px', textAlign: 'center', display: 'block', background: 'linear-gradient(135deg, var(--accent), #8b5cf6)' }}>
+                ⚡ Try Demo (Auto-login)
+              </Link>
+              <Link href="/student" style={{ width: '100%', padding: '0.7rem', fontSize: '0.9rem', borderRadius: '12px', textAlign: 'center', display: 'block', border: '1px solid var(--border)', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                Sign in / Create account
+              </Link>
+            </div>
           </div>
 
           {/* Recruiter Portal Card */}
@@ -71,9 +87,19 @@ export default async function Home() {
             <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem' }}>
               Manage candidates, set up custom AI question banks, and make data-driven hiring decisions effortlessly.
             </p>
-            <Link href="/recruiter" className="btn-primary" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', borderRadius: '12px', background: '#111827' }}>
-              Recruiter Login
-            </Link>
+            {/* Fixed demo profile details */}
+            <div style={{ background: 'var(--surface-hover)', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text)', display: 'block', marginBottom: '0.25rem' }}>Demo profile: Sarah Mitchell</span>
+              <span>Company: TechVentures Inc.</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <Link href="/api/demo/recruiter" className="btn-primary" style={{ width: '100%', padding: '0.8rem', fontSize: '1rem', borderRadius: '12px', textAlign: 'center', display: 'block', background: 'linear-gradient(135deg, #111827, #374151)' }}>
+                ⚡ Try Demo (Auto-login)
+              </Link>
+              <Link href="/recruiter" style={{ width: '100%', padding: '0.7rem', fontSize: '0.9rem', borderRadius: '12px', textAlign: 'center', display: 'block', border: '1px solid var(--border)', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                Sign in / Create account
+              </Link>
+            </div>
           </div>
         </div>
       </div>

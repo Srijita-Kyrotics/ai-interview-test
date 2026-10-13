@@ -1,4 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
 
 import { getCurrentAdmin, getCurrentRecruiter, getCurrentStudent } from '@/lib/actions';
@@ -37,7 +38,11 @@ function audioRoot(): string {
     configured && configured !== ':memory:' && !isAbsolute(configured)
       ? join(process.cwd(), configured)
       : configured;
-  const dir = base ? join(base, '..') : join(process.cwd(), '.data');
+  const defaultDir =
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+      ? join(tmpdir(), 'recruitflow')
+      : join(process.cwd(), '.data');
+  const dir = base ? join(base, '..') : defaultDir;
   return normalize(join(dir, 'audio'));
 }
 

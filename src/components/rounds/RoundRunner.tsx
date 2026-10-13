@@ -192,8 +192,8 @@ export function RoundRunner({
           question?.prompt.toLowerCase().includes('algorithm') ||
           question?.prompt.toLowerCase().includes('debug'))),
   );
-  // Declared with the other hooks: returning early for the instructions or
-  // result phases must not change how many hooks a render calls.
+  // Must be declared here — before any conditional early returns — so the hook
+  // call order is identical on every render (Rules of Hooks).
   const [editorMode, setEditorMode] = useState<'code' | 'text'>('text');
 
   useEffect(() => {
