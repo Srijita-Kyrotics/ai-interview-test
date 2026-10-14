@@ -13,9 +13,19 @@ import {
   completeAssessmentRound,
   generateDynamicPrompt,
   getRoundStatesForRecruiter,
+  getRoundState,
   startAssessmentRound,
   submitRoundAnswer,
 } from '@/lib/round-actions';
+import {
+  createRecruiterQuestion,
+  deleteRecruiterQuestion,
+  finalizeCustomRound,
+  getJobCustomRound,
+  gradeCustomAnswer,
+  listRecruiterQuestions,
+  saveJobCustomRound,
+} from '@/lib/custom-actions';
 import { findGeneratedQuestion } from '@/lib/db/rounds.repo';
 
 /**
@@ -48,6 +58,14 @@ const handlers: Record<string, (...args: never[]) => unknown> = {
   submitRoundAnswer: submitRoundAnswer as never,
   completeAssessmentRound: completeAssessmentRound as never,
   getRoundStatesForRecruiter: getRoundStatesForRecruiter as never,
+  getRoundState: getRoundState as never,
+  createRecruiterQuestion: createRecruiterQuestion as never,
+  deleteRecruiterQuestion: deleteRecruiterQuestion as never,
+  listRecruiterQuestions: listRecruiterQuestions as never,
+  saveJobCustomRound: saveJobCustomRound as never,
+  getJobCustomRound: getJobCustomRound as never,
+  gradeCustomAnswer: gradeCustomAnswer as never,
+  finalizeCustomRound: finalizeCustomRound as never,
   // The harness needs the generated prompt (including the answer key for
   // closed questions) so it can answer like a candidate who knows the material.
   getGeneratedQuestion: findGeneratedQuestion as never,

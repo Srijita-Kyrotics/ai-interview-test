@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, normalize } from 'node:path';
-import { getRoundDefinition } from '@/lib/assessment/registry';
+import { getRoundDefinition, isRoundBuilt } from '@/lib/assessment/registry';
 import type { RoundKind, RoundState, RoundStatus } from '@/lib/assessment/types';
 import * as roundsRepo from '@/lib/db/rounds.repo';
 import type { RoundRow } from '@/lib/db/rounds.repo';
@@ -45,9 +45,21 @@ export function buildRoundState(
   const definition = getRoundDefinition(kind);
   const row = roundsRepo.findRound(application.id, kind);
 
-  // No row yet: the round is open only once the application has actually
-  // reached the stage the round is attached to.
-  const status: RoundStatus = row ? row.status : application.stage === definition.stage ? 'not_started' : 'locked';
+  // The optional custom round has no questions in the registry: it is only real
+  // when the job it belongs to has assigned recruiter questions. Every other
+  // round is built whenever the registry defines questions for it.
+  const customQuestions = kind === 'custom' ? repo.listJobCustomQuestions(application.jobId) : [];
+  const built = kind === 'custom' ? customQuestions.length > 0 : isRoundBuilt(kind);
+
+  // A submitted-but-unscored manual round is reported as `submitted` rather than
+  // `in_progress`, without needing a new value in the database's status column.
+  const status: RoundStatus = row
+    ? row.status === 'in_progress' && row.completed_at
+      ? 'submitted'
+      : row.status
+    : application.stage === definition.stage
+      ? 'not_started'
+      : 'locked';
 
   // The prompt a candidate actually answered is the generated one for the
   // dynamic rounds, so the result page has to read that rather than the
@@ -57,6 +69,7 @@ export function buildRoundState(
         ...answer,
         prompt:
           roundsRepo.findGeneratedQuestion(row.id, answer.questionId)?.question ||
+          customQuestions.find(q => q.id === answer.questionId)?.prompt ||
           definition.questions.find(q => q.id === answer.questionId)?.prompt ||
           answer.questionId,
       }))
@@ -74,7 +87,7 @@ export function buildRoundState(
   const passed = row ? row.status === 'passed' : null;
 
   let secondsRemaining: number | null = null;
-  if (row && row.status === 'in_progress') {
+  if (row && row.status === 'in_progress' && !row.completed_at) {
     const elapsed = Math.floor((now - new Date(row.started_at).getTime()) / 1000);
     secondsRemaining = Math.max(0, definition.timeLimitSec - elapsed);
   }
@@ -98,6 +111,7 @@ export function buildRoundState(
     id: row?.id ?? null,
     applicationId: application.id,
     kind,
+    built,
     status,
     score: row?.score ?? 0,
     maxScore: row?.max_score ?? 0,
@@ -106,6 +120,7 @@ export function buildRoundState(
     startedAt: row?.started_at ?? null,
     completedAt: row?.completed_at ?? null,
     passThreshold: resolvePassThreshold(application.jobId, kind, definition.passThreshold),
+    totalQuestions: kind === 'custom' ? customQuestions.length : definition.questions.length,
     minAnswersToPass: definition.minAnswersToPass,
     proctoringFlagThreshold: definition.proctoringFlagThreshold,
     answers,

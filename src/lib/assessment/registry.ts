@@ -12,6 +12,38 @@ import type { AnswerEvaluation, RoundDefinition, RoundKind, RoundQuestion } from
  * driven from this map and need no changes.
  */
 const definitions: Record<RoundKind, RoundDefinition> = {
+  // Optional, recruiter-authored round. It reuses the otherwise-empty Screening
+  // stage so enabling it never disturbs the pipeline for jobs that do not use it.
+  // The question list is empty here on purpose: the real questions come from the
+  // recruiter's bank for the specific job and are attached at request time, so
+  // this round is never "built" from the registry alone.
+  custom: {
+    kind: 'custom',
+    title: 'Screening Round',
+    shortTitle: 'Screening',
+    stage: 'Screening',
+    passesTo: 'Communication',
+    summary:
+      'A short screening round with questions written by the recruiter for this specific role.',
+    instructions: [
+      'Answer every question in your own words.',
+      'Your answers are read and scored by the recruiter — there is no automatic grading.',
+      'Once you submit the round it is sent for review and cannot be changed.',
+      'The round is timed. If the timer runs out the round closes with whatever you have submitted.',
+    ],
+    timeLimitSec: 20 * 60,
+    passThreshold: 60,
+    // The recruiter decides pass/fail after reading the answers, so no minimum
+    // number of answers is required and nothing is auto-graded.
+    minAnswersToPass: 1,
+    proctoringFlagThreshold: 3,
+    maxScorePerAnswer: 10,
+    questions: [],
+    evaluate: () => {
+      throw new Error('The Screening round is graded manually by the recruiter.');
+    },
+  },
+
   communication: {
     kind: 'communication',
     title: 'Communication Round',
@@ -138,32 +170,6 @@ const definitions: Record<RoundKind, RoundDefinition> = {
     },
   },
 };
-
-function notBuilt(
-  kind: RoundKind,
-  title: string,
-  stage: RoundDefinition['stage'],
-  passesTo: RoundDefinition['passesTo'],
-): RoundDefinition {
-  return {
-    kind,
-    title,
-    shortTitle: title,
-    stage,
-    passesTo,
-    summary: 'Not built yet.',
-    instructions: [],
-    timeLimitSec: 0,
-    passThreshold: 0,
-    minAnswersToPass: 0,
-    proctoringFlagThreshold: 0,
-    maxScorePerAnswer: 0,
-    questions: [],
-    evaluate: () => {
-      throw new Error(`The ${title} evaluator is not implemented.`);
-    },
-  };
-}
 
 export function isRoundKind(value: string): value is RoundKind {
   return value in definitions;

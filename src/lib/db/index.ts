@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS students (
@@ -118,6 +118,29 @@ CREATE TABLE IF NOT EXISTS questions (
   created_at         TEXT NOT NULL
 );
 
+-- A recruiter's reusable library of questions for the optional custom round.
+CREATE TABLE IF NOT EXISTS recruiter_questions (
+  id           TEXT PRIMARY KEY,
+  recruiter_id TEXT NOT NULL REFERENCES recruiters(id) ON DELETE CASCADE,
+  prompt       TEXT NOT NULL,
+  hint         TEXT NOT NULL DEFAULT '',
+  max_score    REAL NOT NULL DEFAULT 10,
+  created_at   TEXT NOT NULL
+);
+
+-- Which bank questions are attached to a job's custom round, and in what order.
+-- A job is considered to have a custom round only when this table has rows for
+-- it (enablement), with the pass threshold living in job_rounds kind='custom'.
+CREATE TABLE IF NOT EXISTS job_custom_questions (
+  job_id      TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  question_id TEXT NOT NULL REFERENCES recruiter_questions(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL,
+  PRIMARY KEY (job_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruiter_questions_recruiter ON recruiter_questions(recruiter_id);
+CREATE INDEX IF NOT EXISTS idx_job_custom_questions_job ON job_custom_questions(job_id);
+
 -- Answers store their own evaluation, so a result stays readable even if the
 -- question bank or the evaluator changes later.
 CREATE TABLE IF NOT EXISTS round_answers (
@@ -191,7 +214,7 @@ function migrate(db: DatabaseSync) {
   if (current > 0 && current < 3) {
     try {
       db.exec("ALTER TABLE round_answers ADD COLUMN audio_url TEXT;");
-    } catch (e) {
+    } catch {
       // Column might already exist if migration was partially run
     }
   }
@@ -199,7 +222,7 @@ function migrate(db: DatabaseSync) {
   if (current > 0 && current < 4) {
     try {
       db.exec("ALTER TABLE students ADD COLUMN password TEXT NOT NULL DEFAULT '';");
-    } catch (e) {
+    } catch {
       // Column might already exist
     }
   }

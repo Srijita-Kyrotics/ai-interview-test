@@ -24,6 +24,7 @@ export default async function RecruiterDashboardPage() {
           </p>
         </div>
         <div className="head-actions">
+          <Link href="/recruiter/questions">Question bank</Link>
           <Link href="/">Home</Link>
           <SignOutRecruiterButton />
         </div>

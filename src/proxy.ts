@@ -1,30 +1,28 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+/**
+ * Cookie-presence gate for the portal routes. It is a first line of defence
+ * only: every server action and route handler still re-checks ownership, so a
+ * forged cookie cannot reach another user's data.
+ */
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isStudentRoute = pathname.startsWith('/student');
-  const isRecruiterRoute = pathname.startsWith('/recruiter');
-  const isAdminRoute = pathname.startsWith('/admin');
-
   if (pathname.startsWith('/student') && pathname !== '/student') {
-    const studentCookie = request.cookies.get('rf_student');
-    if (!studentCookie) {
+    if (!request.cookies.get('rf_student')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }
 
   if (pathname.startsWith('/recruiter') && pathname !== '/recruiter') {
-    const recruiterCookie = request.cookies.get('rf_recruiter');
-    if (!recruiterCookie) {
+    if (!request.cookies.get('rf_recruiter')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }
 
   if (pathname.startsWith('/admin') && pathname !== '/admin') {
-    const adminCookie = request.cookies.get('rf_admin');
-    if (!adminCookie) {
+    if (!request.cookies.get('rf_admin')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
   }

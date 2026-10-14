@@ -39,7 +39,17 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
         <RoundStatusBadge state={state} showScore />
       </div>
 
-      {state.flagged && (
+      {state.kind === 'custom' && state.status === 'submitted' && (
+        <div className="round-flagged">
+          <h4>Awaiting your review</h4>
+          <p className="small">
+            The candidate submitted {state.answers.length} answer
+            {state.answers.length === 1 ? '' : 's'}. Grade them below and record a pass or fail.
+          </p>
+        </div>
+      )}
+
+      {state.flagged && state.kind !== 'custom' && (
         <div className="round-flagged">
           <h4>Needs manual review</h4>
           <p className="small">
@@ -148,7 +158,7 @@ export function RecruiterRoundCard({ state }: { state: RoundState }) {
 
       {!scored && state.status === 'in_progress' && (
         <p className="muted small">
-          {state.answers.length} of {definition.questions.length} answers submitted so far.
+          {state.answers.length} of {state.totalQuestions} answers submitted so far.
         </p>
       )}
 

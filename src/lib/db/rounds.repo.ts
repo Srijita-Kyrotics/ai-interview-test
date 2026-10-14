@@ -233,6 +233,34 @@ export function setAnswerAudio(roundId: string, questionId: string, audioUrl: st
     .run(audioUrl, roundId, questionId);
 }
 
+/**
+ * Closes a manually reviewed round without scoring it. The candidate is done, so
+ * `completed_at` is set while the status stays `in_progress`; `buildRoundState`
+ * derives a `submitted` status from that pair until a recruiter finalises it.
+ */
+export function markRoundCompleted(roundId: string): void {
+  getDb()
+    .prepare('UPDATE rounds SET completed_at = ? WHERE id = ?')
+    .run(new Date().toISOString(), roundId);
+}
+
+/** Records a recruiter's manual grade for a single answer of a custom round. */
+export function gradeAnswer(
+  roundId: string,
+  questionId: string,
+  score: number,
+  maxScore: number,
+  feedback: string,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE round_answers
+       SET score = ?, max_score = ?, feedback = ?, graded = 1
+       WHERE round_id = ? AND question_id = ?`,
+    )
+    .run(score, maxScore, feedback, roundId, questionId);
+}
+
 export function setRoundFlagged(roundId: string, flagged: boolean): void {
   getDb().prepare('UPDATE rounds SET flagged = ? WHERE id = ?').run(flagged ? 1 : 0, roundId);
 }

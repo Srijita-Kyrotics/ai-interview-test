@@ -3,10 +3,12 @@ import { notFound, redirect } from 'next/navigation';
 import PipelineTracker from '@/components/PipelineTracker';
 import SkillMatchSummary from '@/components/SkillMatchSummary';
 import StageControls from '@/components/StageControls';
+import CustomRoundSettings from '@/components/CustomRoundSettings';
 import { RoundStatusBadge } from '@/components/rounds/RoundStatus';
 import { getRoundDefinition } from '@/lib/assessment/registry';
 import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
 import { getCurrentRecruiter, getJob, getJobApplications } from '@/lib/actions';
+import { getJobCustomRound, listRecruiterQuestions } from '@/lib/custom-actions';
 import { getRoundStatesForRecruiter } from '@/lib/round-actions';
 import { OPPORTUNITY_TYPE_LABELS, PIPELINE_STAGES } from '@/lib/types';
 import type { RoundState } from '@/lib/assessment/types';
@@ -33,19 +35,24 @@ export default async function JobPipelinePage({ params }: JobPipelinePageProps) 
   // A recruiter may only see the pipeline for their own roles.
   if (job.recruiterId !== recruiter.id) notFound();
 
-  const applications = await getJobApplications(job.id);
+  const [applications, customConfig, bank] = await Promise.all([
+    getJobApplications(job.id),
+    getJobCustomRound(job.id),
+    listRecruiterQuestions(),
+  ]);
 
   // Batched pass to show the relevant round status for each candidate's stage
   const roundByApplication = new Map<string, RoundState>();
   await Promise.all(
     applications.map(async application => {
       const states = await getRoundStatesForRecruiter(application.id, ACTIVE_ROUND_KINDS);
-      // Pick round for current stage, or latest round that was started / completed
+      // Pick round for current stage, or latest round that was started / completed.
+      // Unbuilt rounds (a screening round this job never configured) are ignored.
       const stageRound = Object.values(states).find(s => {
         const def = getRoundDefinition(s.kind);
-        return def.stage === application.stage;
+        return s.built && def.stage === application.stage;
       });
-      const nonLocked = Object.values(states).filter(s => s.status !== 'locked');
+      const nonLocked = Object.values(states).filter(s => s.built && s.status !== 'locked');
       const chosen = stageRound ?? nonLocked[nonLocked.length - 1] ?? states.communication;
       if (chosen) roundByApplication.set(application.id, chosen);
     }),
@@ -94,6 +101,16 @@ export default async function JobPipelinePage({ params }: JobPipelinePageProps) 
           </>
         )}
       </div>
+
+      <CustomRoundSettings
+        jobId={job.id}
+        bank={bank.map(q => ({ id: q.id, prompt: q.prompt, maxScore: q.maxScore }))}
+        initial={{
+          enabled: customConfig.enabled,
+          passThreshold: customConfig.passThreshold,
+          questionIds: customConfig.questions.map(q => q.id),
+        }}
+      />
 
       <h2>Pipeline</h2>
       {applications.length === 0 ? (

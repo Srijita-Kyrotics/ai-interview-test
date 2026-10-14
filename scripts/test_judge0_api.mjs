@@ -1,4 +1,4 @@
-import { executeCode, SUPPORTED_LANGUAGES } from '../src/lib/judge0.ts';
+import { executeCode } from '../src/lib/judge0.ts';
 
 async function testAllLanguages() {
   console.log('Testing Judge0 Execution Helper for C, C++, Java, and Python...\n');

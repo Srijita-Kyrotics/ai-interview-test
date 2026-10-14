@@ -2,13 +2,26 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { RoundRunner } from '@/components/rounds/RoundRunner';
-import { getRoundDefinition, isRoundBuilt, isRoundKind } from '@/lib/assessment/registry';
+import { getRoundDefinition, isRoundKind } from '@/lib/assessment/registry';
 import { toSerializable } from '@/lib/assessment/types';
+import type { RoundKind, RoundQuestion } from '@/lib/assessment/types';
 import { getCurrentStudent } from '@/lib/actions';
 import * as repo from '@/lib/db/repo';
 import { buildRoundState } from '@/lib/rounds';
 
 export const metadata = { title: 'Assessment round' };
+
+function toCustomQuestion(question: repo.JobCustomQuestion): RoundQuestion {
+  return {
+    id: question.id,
+    kind: 'custom' as RoundKind,
+    position: question.position,
+    prompt: question.prompt,
+    hint: question.hint,
+    minWords: 0,
+    suggestedWords: 0,
+  };
+}
 
 export default async function RoundPage({
   params,
@@ -28,16 +41,26 @@ export default async function RoundPage({
   const job = repo.findJobById(application.jobId);
   if (!job) notFound();
 
-  const definition = getRoundDefinition(kind);
   const state = buildRoundState(application, kind);
 
-  if (!isRoundBuilt(kind)) {
+  // The optional custom round has no registry questions: its definition is
+  // assembled from the recruiter questions assigned to this job.
+  const definition =
+    kind === 'custom'
+      ? {
+          ...getRoundDefinition('custom'),
+          questions: repo.listJobCustomQuestions(job.id).map(toCustomQuestion),
+        }
+      : getRoundDefinition(kind);
+
+  if (!state.built || definition.questions.length === 0) {
     return (
       <div className="container container-narrow">
         <div className="card empty-state">
           <h1>{definition.title}</h1>
           <p className="lead-muted">
-            This round has not been built yet. Please check back later or contact your recruiter.
+            This round has not been set up for this role yet. Please check back later or contact your
+            recruiter.
           </p>
           <Link href="/student/dashboard" className="btn-ghost btn-sm">
             Back to dashboard

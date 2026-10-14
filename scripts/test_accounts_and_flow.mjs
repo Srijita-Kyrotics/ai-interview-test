@@ -1,11 +1,7 @@
-import { getDb } from '../src/lib/db/index.ts';
 import * as repo from '../src/lib/db/repo.ts';
 import * as roundsRepo from '../src/lib/db/rounds.repo.ts';
 import { hashPassword, verifyPassword } from '../src/lib/passwords.ts';
 import { calculateSkillMatch } from '../src/lib/types.ts';
-import { getRoundDefinition } from '../src/lib/assessment/registry.ts';
-
-const db = getDb();
 
 console.log('=== Verifying Account Retention and Persistence ===');
 
@@ -66,7 +62,6 @@ const application = repo.insertApplication({
 console.log(`Created Application at HR stage (Match: ${match.score}%)`);
 
 // 5. Start HR Round
-const hrDef = getRoundDefinition('hr');
 const hrRound = roundsRepo.startRound(application.id, 'hr');
 console.log(`Started HR Round (ID: ${hrRound.id}, Status: ${hrRound.status})`);
 

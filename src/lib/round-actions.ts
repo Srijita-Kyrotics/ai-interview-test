@@ -12,7 +12,7 @@ import { decideRoundOutcome } from '@/lib/assessment/scoring';
 import { buildRoundState, resolvePassThreshold } from '@/lib/rounds';
 import { consume } from '@/lib/rate-limit';
 import { getCurrentRecruiter, getCurrentStudent, updateApplicationStage } from '@/lib/actions';
-import type { AnswerEvaluation, AnswerRecord, RoundKind, RoundState } from '@/lib/assessment/types';
+import type { AnswerEvaluation, AnswerRecord, RoundKind, RoundQuestion, RoundState } from '@/lib/assessment/types';
 import type { Application, ApplicationStage } from '@/lib/types';
 
 /* -------------------------------------------------------------------------- */
@@ -62,10 +62,25 @@ async function requireOwnedRound(roundId: string) {
 
 function requireDefinition(kind: RoundKind) {
   const definition = getRoundDefinition(kind);
-  if (!isRoundBuilt(kind)) {
+  // The custom round carries no questions in the registry — its questions live
+  // in the job's assigned bank — so it must not be rejected as "not built".
+  if (kind !== 'custom' && !isRoundBuilt(kind)) {
     throw new Error(`The ${definition.title} has not been built yet.`);
   }
   return definition;
+}
+
+/** Shapes a recruiter bank question into the registry's question shape. */
+function toCustomRoundQuestion(question: repo.JobCustomQuestion): RoundQuestion {
+  return {
+    id: question.id,
+    kind: 'custom',
+    position: question.position,
+    prompt: question.prompt,
+    hint: question.hint,
+    minWords: 0,
+    suggestedWords: 0,
+  };
 }
 
 /**
@@ -102,8 +117,10 @@ export async function startAssessmentRound(applicationId: string, kind: string) 
 
   const existing = roundsRepo.findRound(application.id, roundKind);
   // A completed round is kept as the candidate's record; they can still look
-  // at the result rather than silently overwriting it with a new attempt.
-  if (existing && existing.status !== 'in_progress') {
+  // at the result rather than silently overwriting it with a new attempt. A
+  // submitted manual round is likewise closed even though it is still awaiting
+  // review.
+  if (existing && (existing.status !== 'in_progress' || existing.completed_at)) {
     throw new Error('You have already completed this round.');
   }
 
@@ -129,7 +146,14 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
     throw new Error('Time is up for this round.');
   }
 
-  const question = getQuestion(round.kind, questionId);
+  const customQuestion =
+    round.kind === 'custom' ? repo.findJobCustomQuestion(application.jobId, questionId) : null;
+  const question =
+    round.kind === 'custom'
+      ? customQuestion
+        ? toCustomRoundQuestion(customQuestion)
+        : null
+      : getQuestion(round.kind, questionId);
   if (!question) throw new Error('That question is not part of this round.');
 
   const text = answer.trim();
@@ -158,7 +182,18 @@ export async function submitRoundAnswer(roundId: string, questionId: string, ans
     signals: [],
   };
 
-  if (round.kind === 'communication' || round.kind === 'aptitude' || round.kind === 'technical1' || round.kind === 'technical2' || round.kind === 'hr') {
+  if (round.kind === 'custom') {
+    // Manual round: the answer is stored ungraded and a recruiter scores it
+    // later. Ungraded answers are exactly what keep the round out of a
+    // premature auto-pass.
+    graded = false;
+    evaluation = {
+      score: 0,
+      maxScore: customQuestion?.maxScore ?? definition.maxScorePerAnswer,
+      feedback: 'Submitted — this answer is awaiting the recruiter’s review.',
+      signals: [],
+    };
+  } else if (round.kind === 'communication' || round.kind === 'aptitude' || round.kind === 'technical1' || round.kind === 'technical2' || round.kind === 'hr') {
     const generated = roundsRepo.findGeneratedQuestion(round.id, questionId);
     if (!generated) throw new Error('Question not found. Did it fail to generate?');
 
@@ -354,6 +389,20 @@ export async function completeAssessmentRound(roundId: string): Promise<RoundCom
 
   if (round.status !== 'in_progress') {
     return { round, state: buildRoundState(application, round.kind), advancedTo: null };
+  }
+
+  // A manually reviewed round is not scored on submission. It is parked as
+  // `submitted` (derived from completed_at) and only a recruiter's review can
+  // pass or fail it.
+  if (round.kind === 'custom') {
+    roundsRepo.markRoundCompleted(round.id);
+    const completed = roundsRepo.findRoundById(round.id) ?? round;
+    refreshRouter();
+    return {
+      round: completed,
+      state: buildRoundState(application, round.kind),
+      advancedTo: null,
+    };
   }
 
   const answers = roundsRepo.listAnswers(round.id);

@@ -56,6 +56,15 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
 }
 
+/**
+ * Dev-only escape hatch for machines without a webcam. Enabled with
+ * `NEXT_PUBLIC_BYPASS_WEBCAM=1` and hard-disabled in production builds, so it can
+ * never weaken proctoring on a deployed instance. Screen sharing is still
+ * required, and the round, grading and review flow are unchanged.
+ */
+const BYPASS_WEBCAM =
+  process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_BYPASS_WEBCAM === '1';
+
 function formatTime(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const mins = Math.floor(safe / 60);
@@ -130,17 +139,24 @@ export function RoundRunner({
   const requestProctoring = async () => {
     try {
       setError(null);
-      const webcam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      let webcam: MediaStream | null = null;
+      if (!BYPASS_WEBCAM) {
+        webcam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      setWebcamStream(webcam);
+      if (webcam) setWebcamStream(webcam);
       setScreenStream(screen);
       setProctoringGranted(true);
-    } catch (err) {
-      setError('Camera and screen sharing permissions are required for proctoring.');
+    } catch {
+      setError(
+        BYPASS_WEBCAM
+          ? 'Screen sharing permission is required for proctoring.'
+          : 'Camera and screen sharing permissions are required for proctoring.',
+      );
     }
   };
 
-  const stopAndUploadProctoring = async (roundId: string) => {
+  const stopAndUploadProctoring = useCallback(async (roundId: string) => {
     return new Promise<void>((resolve) => {
       let pending = 0;
       const checkDone = () => { if (pending === 0) resolve(); };
@@ -176,7 +192,7 @@ export function RoundRunner({
         resolve();
       }
     });
-  };
+  }, [webcamStream, screenStream]);
 
   const question = definition.questions[index];
   const total = definition.questions.length;
@@ -192,13 +208,12 @@ export function RoundRunner({
           question?.prompt.toLowerCase().includes('algorithm') ||
           question?.prompt.toLowerCase().includes('debug'))),
   );
-  // Must be declared here — before any conditional early returns — so the hook
-  // call order is identical on every render (Rules of Hooks).
-  const [editorMode, setEditorMode] = useState<'code' | 'text'>('text');
-
-  useEffect(() => {
-    setEditorMode(isCodingDefault ? 'code' : 'text');
-  }, [index, isCodingDefault]);
+  // Editor mode is derived per question rather than synced in an effect: a code
+  // question defaults to the IDE, and a manual toggle is remembered only for the
+  // question it was made on.
+  const [editorOverride, setEditorOverride] = useState<{ index: number; mode: 'code' | 'text' } | null>(null);
+  const editorMode = editorOverride?.index === index ? editorOverride.mode : isCodingDefault ? 'code' : 'text';
+  const setEditorMode = useCallback((mode: 'code' | 'text') => setEditorOverride({ index, mode }), [index]);
 
   // An answer is final once graded, so a question that already has one is shown
   // read-only rather than offered for another attempt.
@@ -367,7 +382,7 @@ export function RoundRunner({
         setError(err instanceof Error ? err.message : 'Time is up and the round could not be closed.');
       }
     });
-  }, [secondsLeft, phase, state.id]);
+  }, [secondsLeft, phase, state.id, stopAndUploadProctoring]);
 
   const begin = useCallback(() => {
     if (!proctoringGranted) {
@@ -445,7 +460,7 @@ export function RoundRunner({
         setError(err instanceof Error ? err.message : 'Could not finish the round.');
       }
     });
-  }, [state.id]);
+  }, [state.id, stopAndUploadProctoring]);
 
   const wordCount = useMemo(() => countWords(draft), [draft]);
   const lowOnTime = secondsLeft !== null && secondsLeft <= 60;
@@ -490,11 +505,11 @@ export function RoundRunner({
             {proctoringGranted ? (
               <span className="badge badge-success" style={{ padding: '0.65rem 1.1rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', borderRadius: '8px', border: '1px solid #86efac', background: '#f0fdf4', color: '#166534' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'inline-block' }} />
-                ✓ Proctoring Active: Camera & Screen Verified
+                {BYPASS_WEBCAM ? '✓ Proctoring Active: Screen sharing verified (webcam bypassed)' : '✓ Proctoring Active: Camera & Screen Verified'}
               </span>
             ) : (
               <button className="btn-secondary btn-lg" onClick={requestProctoring} type="button">
-                🎥 Enable Camera & Screen Proctoring
+                {BYPASS_WEBCAM ? '🖥️ Enable Screen Proctoring' : '🎥 Enable Camera & Screen Proctoring'}
               </button>
             )}
             <button className="btn-primary btn-lg" onClick={begin} disabled={!proctoringGranted}>
@@ -504,10 +519,12 @@ export function RoundRunner({
         </section>
         {proctoringGranted && (
           <div className="proctoring-pip" style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
-              <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
-            </div>
+            {webcamStream && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
+                <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Screen</span>
               <video ref={screenVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
@@ -521,26 +538,30 @@ export function RoundRunner({
   /* --------------------------------- result ------------------------------- */
   if (phase === 'finished') {
     const passed = state.status === 'passed';
+    const awaiting = state.status === 'submitted';
     return (
       <div className="round-shell">
-        <section className={`card round-card round-result round-result-${passed ? 'passed' : 'failed'}`}>
+        <section className={`card round-card round-result round-result-${passed ? 'passed' : awaiting ? 'submitted' : 'failed'}`}>
           <p className="eyebrow">{definition.shortTitle} round</p>
-          <h1>{passed ? 'Round passed' : 'Round not passed'}</h1>
+          <h1>{passed ? 'Round passed' : awaiting ? 'Submitted for review' : 'Round not passed'}</h1>
           <RoundStatusHeadline state={state} />
           <p className="lede">
-            {passed
-              ? advancedTo
-                ? `You scored ${state.percent}%, which clears the ${state.passThreshold}% threshold. Your application has moved to ${advancedTo}.`
-                : `You scored ${state.percent}%, which clears the ${state.passThreshold}% threshold.`
-              : `You scored ${state.percent}%. The pass mark is ${state.passThreshold}%, so the round is not cleared. Your application stays at ${stageNow} and your recruiter will decide what happens next.`}
+            {awaiting
+              ? `Your ${state.answers.length} answer${state.answers.length === 1 ? '' : 's'} ${state.answers.length === 1 ? 'has' : 'have'} been sent to the recruiter. This round is graded manually, so you will be notified once it has been reviewed.`
+              : passed
+                ? advancedTo
+                  ? `You scored ${state.percent}%, which clears the ${state.passThreshold}% threshold. Your application has moved to ${advancedTo}.`
+                  : `You scored ${state.percent}%, which clears the ${state.passThreshold}% threshold.`
+                : `You scored ${state.percent}%. The pass mark is ${state.passThreshold}%, so the round is not cleared. Your application stays at ${stageNow} and your recruiter will decide what happens next.`}
           </p>
         </section>
 
         <section className="card round-card">
           <h2>Your answers</h2>
           <p className="muted">
-            Each answer was assessed as you submitted it. The five signals below are the same ones
-            the score is built from.
+            {awaiting
+              ? 'Your answers are shown below and are awaiting the recruiter’s review.'
+              : 'Each answer was assessed as you submitted it. The signals below are the same ones the score is built from.'}
           </p>
           <ol className="round-review">
             {state.answers.map(answer => (
@@ -548,7 +569,7 @@ export function RoundRunner({
                 <div className="round-review-head">
                   <h3>{answer.prompt}</h3>
                   <span className="round-review-score">
-                    {answer.score} / {answer.maxScore}
+                    {answer.graded ? `${answer.score} / ${answer.maxScore}` : 'Awaiting review'}
                   </span>
                 </div>
                 <p className="round-review-answer">{answer.answer}</p>
@@ -751,10 +772,12 @@ export function RoundRunner({
       </section>
       {proctoringGranted && phase === 'active' && (
         <div className="proctoring-pip" style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', flexDirection: 'column', gap: '10px', zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
-            <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
-          </div>
+          {webcamStream && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Webcam</span>
+              <video ref={webcamVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
             <span style={{ fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>Screen</span>
             <video ref={screenVideoRef} autoPlay muted playsInline style={{ width: '200px', borderRadius: '4px', border: '1px solid #444' }} />

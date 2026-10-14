@@ -6,6 +6,19 @@ import type { Recruiter, Student } from '@/lib/types';
 export { DEMO_PASSWORD, DEMO_RECRUITER, DEMO_STUDENT };
 
 /**
+ * Whether the one-click demo logins are available. They are a development and
+ * showcase convenience, so they are off in production unless a deployment opts
+ * in explicitly with `RECRUITFLOW_ENABLE_DEMO=1`. Setting it to `0` forces them
+ * off everywhere.
+ */
+export function demoLoginEnabled(): boolean {
+  const flag = process.env.RECRUITFLOW_ENABLE_DEMO;
+  if (flag === '1') return true;
+  if (flag === '0') return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
+/**
  * Fixed credentials for local testing and demos, so nobody has to keep creating
  * throwaway accounts. The password is re-hashed and written on every seed, so
  * these logins stay valid even if someone changes the password in the UI.

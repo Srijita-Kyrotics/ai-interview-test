@@ -1,4 +1,3 @@
-import { isRoundBuilt } from './registry';
 import type { RoundState, RoundStatus } from './types';
 
 /**
@@ -16,6 +15,8 @@ export function roundStatusLabel(status: RoundStatus): string {
       return 'Not started';
     case 'in_progress':
       return 'In progress';
+    case 'submitted':
+      return 'Awaiting review';
     case 'passed':
       return 'Passed';
     case 'failed':
@@ -25,7 +26,5 @@ export function roundStatusLabel(status: RoundStatus): string {
 
 /** True when the candidate can still take the round. */
 export function isRoundActionable(state: RoundState): boolean {
-  return (
-    isRoundBuilt(state.kind) && (state.status === 'not_started' || state.status === 'in_progress')
-  );
+  return state.built && (state.status === 'not_started' || state.status === 'in_progress');
 }

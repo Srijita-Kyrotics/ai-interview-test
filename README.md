@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RecruitFlow
 
-## Getting Started
+An AI-driven campus hiring platform. Recruiters post jobs and manage a candidate
+pipeline; students build a profile, get skill-matched to roles, and take a
+proctored, AI-graded assessment funnel.
 
-First, run the development server:
+Built with **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript**,
+and a local **SQLite** database via Node's built-in `node:sqlite`.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## The assessment pipeline
+
+A passing score in one round advances the application to the next:
+
+```
+Applied → Communication → Aptitude → Technical 1 → Technical 2 → HR → Selected
+                                  ↘                                ↙
+                                        Rejected
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Each round is defined once in `src/lib/assessment/registry.ts` (questions, time
+limit, pass threshold, proctoring tolerance, evaluator). The database, server
+actions, and runner UI are all driven from that map, so adding or changing a
+round does not touch the runner.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Grading** — open questions are graded by an LLM through OpenRouter the moment
+  an answer is submitted. If grading fails, the answer is stored *ungraded* and
+  the round is flagged for a human rather than scored as a zero.
+- **Coding** — the Technical rounds embed a Monaco IDE and run code through
+  [Judge0](https://judge0.com/).
+- **Proctoring** — webcam and screen recordings plus tab-switch/copy/paste events.
+  Crossing the event threshold flags the round for review. Recordings are served
+  only to the owning student, the job's recruiter, or an admin.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Getting started
 
-## Learn More
+Requires **Node.js >= 22.5** (for `node:sqlite`).
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open <http://localhost:3000>.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Environment variables
 
-## Deploy on Vercel
+Create a `.env.local` (git-ignored):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable | Required | Description |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | Yes, for AI rounds | OpenRouter API key used to generate and grade questions. |
+| `OPENROUTER_MODEL` | No | Model id. Defaults to `openai/gpt-4o-mini`. |
+| `OPENROUTER_REFERER` | No | `HTTP-Referer` sent to OpenRouter. Defaults to `http://localhost:3000`. |
+| `JUDGE0_URL` | No | Judge0 base URL for code execution. |
+| `RECRUITFLOW_DB_PATH` | No | SQLite file path. Defaults to `.data/recruitflow.db`. |
+| `RECRUITFLOW_ENABLE_DEMO` | No | Set to `1` to enable one-click demo logins in production (they are off there by default). |
+| `RECRUITFLOW_ADMIN_EMAIL` / `RECRUITFLOW_ADMIN_PASSWORD` | No | Credentials that open the admin question bank. |
+| `RECRUITFLOW_TEST_HOOKS` | No | Set to `1` to enable `/api/test/action` for the smoke test. |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Demo logins
+
+No sign-up needed in development — use the **Try Demo** buttons on the home page,
+or sign in manually:
+
+- **Student** — `alex.demo@recruitflow.dev`
+- **Recruiter** — `Dipannita` / `Acme Corp`
+- **Password (both)** — `Demo@1234`
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the dev server. |
+| `npm run build` / `npm start` | Production build and server. |
+| `npm run lint` | ESLint. |
+| `npm run typecheck` | `tsc --noEmit`. |
+| `npm run test:unit` | Unit tests for parsing, scoring, passwords, rate limiting, storage. |
+| `npm run test:smoke` | End-to-end smoke test against a running server (requires `RECRUITFLOW_TEST_HOOKS=1`). |
+| `npm run db:reset` | Drop and reseed the local database. |
+
+## Project layout
+
+```
+src/
+  app/            routes: student, recruiter, admin portals + API handlers
+  components/     UI, including components/rounds/* for the runner and IDE
+  lib/
+    assessment/   round registry, pure scoring, AI-response parsing, question banks
+    ai/           OpenRouter client
+    db/           schema + migrations, repositories
+    actions.ts    server actions for sessions, jobs, applications, questions
+    round-actions.ts  server actions for taking and grading rounds
+  proxy.ts        cookie gate for the portal routes
+```
+
+## Notes
+
+- The database is a single SQLite file and the recordings live on local disk
+  under `.data/`. That is fine for local/demo use but **not** for serverless
+  hosts with ephemeral storage — swap in a managed database and object storage.
+- Server actions and route handlers re-check ownership on every call; `proxy.ts`
+  only redirects unauthenticated navigation.

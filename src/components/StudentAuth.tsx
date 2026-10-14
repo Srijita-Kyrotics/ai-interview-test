@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { signInStudent } from '@/lib/actions';
 import { DEMO_PASSWORD, DEMO_STUDENT } from '@/lib/demo-credentials';
 import StudentProfileForm from './StudentProfileForm';
 
 export default function StudentAuth() {
+  const router = useRouter();
   const [isSignIn, setIsSignIn] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +20,8 @@ export default function StudentAuth() {
     startTransition(async () => {
       try {
         await signInStudent(email, password);
-        window.location.href = '/student/dashboard';
+        router.push('/student/dashboard');
+        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not sign in.');
       }

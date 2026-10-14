@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import SkillPicker from '@/components/SkillPicker';
 import { createStudent, updateStudent } from '@/lib/actions';
 import type { Skill } from '@/lib/types';
@@ -27,6 +28,7 @@ export default function StudentProfileForm({
   initial,
   submitLabel,
 }: StudentProfileFormProps) {
+  const router = useRouter();
   const [values, setValues] = useState(initial ?? EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -45,7 +47,8 @@ export default function StudentProfileForm({
         } else {
           await createStudent({ ...values, password: values.password ?? '' });
         }
-        window.location.href = '/student/dashboard';
+        router.push('/student/dashboard');
+        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
       }

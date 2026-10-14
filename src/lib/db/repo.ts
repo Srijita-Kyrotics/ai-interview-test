@@ -313,6 +313,22 @@ export function insertJobRound(jobId: string, kind: string, position: number, pa
   return jobRound;
 }
 
+/** Inserts or updates a job's configuration for one round kind. */
+export function upsertJobRound(jobId: string, kind: string, position: number, passThreshold: number) {
+  getDb()
+    .prepare(
+      `INSERT INTO job_rounds (id, job_id, kind, position, pass_threshold)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (job_id, kind) DO UPDATE SET position = excluded.position, pass_threshold = excluded.pass_threshold`,
+    )
+    .run(generateId(), jobId, kind, position, passThreshold);
+}
+
+/** Removes a job's configuration for a round, used to disable the custom round. */
+export function deleteJobRound(jobId: string, kind: string): void {
+  getDb().prepare('DELETE FROM job_rounds WHERE job_id = ? AND kind = ?').run(jobId, kind);
+}
+
 export function listJobRounds(jobId: string) {
   const rows = getDb().prepare('SELECT * FROM job_rounds WHERE job_id = ? ORDER BY position ASC').all(jobId) as JobRoundRow[];
   return rows.map(r => ({ id: r.id, jobId: r.job_id, kind: r.kind, position: r.position, passThreshold: r.pass_threshold }));
@@ -340,6 +356,124 @@ export function listQuestionsByCategory(category: string) {
 export function listAllQuestions() {
   const rows = getDb().prepare('SELECT * FROM questions ORDER BY created_at DESC').all() as QuestionRow[];
   return rows.map(r => ({ id: r.id, category: r.category, questionType: r.question_type, content: r.content, metadataJson: r.metadata_json, createdBy: r.created_by, createdAt: r.created_at }));
+}
+
+/* -------------------------------------------------------------------------- */
+/*                    Recruiter question bank (custom round)                   */
+/* -------------------------------------------------------------------------- */
+
+export interface RecruiterQuestion {
+  id: string;
+  recruiterId: string;
+  prompt: string;
+  hint: string;
+  maxScore: number;
+  createdAt: string;
+}
+
+type RecruiterQuestionRow = {
+  id: string;
+  recruiter_id: string;
+  prompt: string;
+  hint: string;
+  max_score: number;
+  created_at: string;
+};
+
+function toRecruiterQuestion(row: RecruiterQuestionRow): RecruiterQuestion {
+  return {
+    id: row.id,
+    recruiterId: row.recruiter_id,
+    prompt: row.prompt,
+    hint: row.hint,
+    maxScore: row.max_score,
+    createdAt: row.created_at,
+  };
+}
+
+export function insertRecruiterQuestion(data: {
+  recruiterId: string;
+  prompt: string;
+  hint: string;
+  maxScore: number;
+}): RecruiterQuestion {
+  const question: RecruiterQuestion = { ...data, id: generateId(), createdAt: now() };
+  getDb()
+    .prepare(
+      `INSERT INTO recruiter_questions (id, recruiter_id, prompt, hint, max_score, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      question.id,
+      question.recruiterId,
+      question.prompt,
+      question.hint,
+      question.maxScore,
+      question.createdAt,
+    );
+  return question;
+}
+
+export function listRecruiterQuestions(recruiterId: string): RecruiterQuestion[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM recruiter_questions WHERE recruiter_id = ? ORDER BY created_at DESC, rowid DESC')
+    .all(recruiterId) as RecruiterQuestionRow[];
+  return rows.map(toRecruiterQuestion);
+}
+
+export function findRecruiterQuestion(id: string): RecruiterQuestion | null {
+  const row = getDb().prepare('SELECT * FROM recruiter_questions WHERE id = ?').get(id) as
+    | RecruiterQuestionRow
+    | undefined;
+  return row ? toRecruiterQuestion(row) : null;
+}
+
+export function deleteRecruiterQuestion(recruiterId: string, id: string): void {
+  getDb()
+    .prepare('DELETE FROM recruiter_questions WHERE id = ? AND recruiter_id = ?')
+    .run(id, recruiterId);
+}
+
+export interface JobCustomQuestion {
+  id: string;
+  prompt: string;
+  hint: string;
+  maxScore: number;
+  position: number;
+}
+
+/** Replaces the whole ordered set of questions attached to a job's custom round. */
+export function setJobCustomQuestions(jobId: string, questionIds: string[]): void {
+  transact(db => {
+    db.prepare('DELETE FROM job_custom_questions WHERE job_id = ?').run(jobId);
+    const stmt = db.prepare(
+      'INSERT OR IGNORE INTO job_custom_questions (job_id, question_id, position) VALUES (?, ?, ?)',
+    );
+    [...new Set(questionIds)].forEach((questionId, position) => stmt.run(jobId, questionId, position));
+  });
+}
+
+export function listJobCustomQuestions(jobId: string): JobCustomQuestion[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT q.id, q.prompt, q.hint, q.max_score, j.position
+       FROM job_custom_questions j
+       JOIN recruiter_questions q ON q.id = j.question_id
+       WHERE j.job_id = ?
+       ORDER BY j.position ASC`,
+    )
+    .all(jobId) as { id: string; prompt: string; hint: string; max_score: number; position: number }[];
+  return rows.map(r => ({
+    id: r.id,
+    prompt: r.prompt,
+    hint: r.hint,
+    maxScore: r.max_score,
+    position: r.position,
+  }));
+}
+
+export function findJobCustomQuestion(jobId: string, questionId: string): JobCustomQuestion | null {
+  return listJobCustomQuestions(jobId).find(q => q.id === questionId) ?? null;
 }
 
 /* -------------------------------------------------------------------------- */

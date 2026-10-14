@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { SUPPORTED_LANGUAGES, type LanguageOption, type ExecutionResult } from '@/lib/judge0';
 
 interface CodingIDEProps {

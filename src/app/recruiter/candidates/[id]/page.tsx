@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import PipelineTracker from '@/components/PipelineTracker';
 import SkillMatchSummary from '@/components/SkillMatchSummary';
 import StageControls from '@/components/StageControls';
+import CustomRoundReview from '@/components/CustomRoundReview';
 import { RecruiterRoundCard } from '@/components/rounds/RecruiterRoundCard';
 import { ACTIVE_ROUND_KINDS } from '@/lib/assessment/types';
 import { getApplication, getCurrentRecruiter, getJob, getStudent } from '@/lib/actions';
@@ -38,7 +39,10 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
   if (job.recruiterId !== recruiter.id) notFound();
 
   const roundStates = await getRoundStatesForRecruiter(id, ACTIVE_ROUND_KINDS);
-  const rounds = Object.values(roundStates);
+  // Only show rounds that actually exist for this candidate; a screening round
+  // the job never configured must not appear as an empty card.
+  const rounds = Object.values(roundStates).filter(state => state.built);
+  const customRound = roundStates.custom;
 
   return (
     <div className="container container-narrow">
@@ -82,6 +86,12 @@ export default async function CandidatePage({ params }: CandidatePageProps) {
           <h2>Skill match for this role</h2>
           <SkillMatchSummary job={job} student={student} />
         </section>
+
+        {customRound?.built && customRound.status === 'submitted' && (
+          <section>
+            <CustomRoundReview state={customRound} />
+          </section>
+        )}
 
         <section>
           <h2>Assessment rounds</h2>

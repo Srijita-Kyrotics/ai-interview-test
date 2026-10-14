@@ -5,12 +5,20 @@ import type { ApplicationStage } from '@/lib/types';
  * one implemented so far; the rest exist here so that adding a round is a
  * matter of registering a definition, not touching the runner UI.
  */
-export const ROUND_KINDS = ['communication', 'aptitude', 'technical1', 'technical2', 'hr'] as const;
+export const ROUND_KINDS = [
+  'custom',
+  'communication',
+  'aptitude',
+  'technical1',
+  'technical2',
+  'hr',
+] as const;
 
 export type RoundKind = (typeof ROUND_KINDS)[number];
 
 /** Rounds that currently have questions and an evaluator wired up. */
 export const ACTIVE_ROUND_KINDS: RoundKind[] = [
+  'custom',
   'communication',
   'aptitude',
   'technical1',
@@ -20,9 +28,17 @@ export const ACTIVE_ROUND_KINDS: RoundKind[] = [
 
 /**
  * `locked` is derived, not stored: a round is locked until the application
- * reaches the pipeline stage the round is attached to.
+ * reaches the pipeline stage the round is attached to. `submitted` is likewise
+ * derived: the candidate has finished a manually reviewed round and it is
+ * waiting on a recruiter to grade it.
  */
-export type RoundStatus = 'locked' | 'not_started' | 'in_progress' | 'passed' | 'failed';
+export type RoundStatus =
+  | 'locked'
+  | 'not_started'
+  | 'in_progress'
+  | 'submitted'
+  | 'passed'
+  | 'failed';
 
 export type SignalLevel = 'good' | 'ok' | 'poor';
 
@@ -137,6 +153,12 @@ export interface RoundState {
   id: string | null;
   applicationId: string;
   kind: RoundKind;
+  /**
+   * Whether this round has any questions for this candidate. Every fixed round
+   * is built from the registry; the optional custom round is built only when the
+   * job it belongs to has assigned recruiter questions.
+   */
+  built: boolean;
   status: RoundStatus;
   score: number;
   maxScore: number;
@@ -146,6 +168,8 @@ export interface RoundState {
   startedAt: string | null;
   completedAt: string | null;
   passThreshold: number;
+  /** How many questions this round has for this candidate. */
+  totalQuestions: number;
   /** Percentage needed to pass. */
   minAnswersToPass: number;
   /** Proctoring events tolerated before the round is flagged for review. */
