@@ -63,7 +63,7 @@ No sign-up needed in development — use the **Try Demo** buttons on the home pa
 or sign in manually:
 
 - **Student** — `alex.demo@recruitflow.dev`
-- **Recruiter** — `Dipannita` / `Acme Corp`
+- **Recruiter** — `Sarah` / `Acme Corp`
 - **Password (both)** — `Demo@1234`
 
 ## Scripts

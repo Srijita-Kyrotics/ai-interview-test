@@ -16,6 +16,6 @@ export const DEMO_STUDENT = {
 
 /** A recruiter that already owns roles in the seed data, so its dashboard has a pipeline. */
 export const DEMO_RECRUITER = {
-  name: 'Dipannita',
+  name: 'Sarah',
   company: 'Acme Corp',
 } as const;
